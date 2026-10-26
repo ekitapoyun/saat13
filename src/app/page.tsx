@@ -117,47 +117,58 @@ export default function Home() {
 
 function Login() {
   const [email, setEmail] = useState('');
-  const [sent, setSent] = useState(false);
+  // Varsayılan şifre hazır gelir. İstenirse değiştirilebilir.
+  const [password, setPassword] = useState('11111111');
   const [err, setErr] = useState('');
+  const [working, setWorking] = useState(false);
 
-  async function send() {
+  async function enter() {
     setErr('');
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.origin },
-    });
-    if (error) {
-      const m = (error.message || '').toLowerCase();
-      if (error.status === 429 || m.includes('rate limit') || m.includes('security purposes')) {
-        setErr('Kısa sürede çok fazla giriş e-postası istendi. Biraz bekleyip (yaklaşık 1 saat) tekrar dene.');
-      } else if (m.includes('signups not allowed') || m.includes('signup')) {
-        setErr('Yeni kayıtlar şu an kapalı. Yönetici Supabase ayarlarını kontrol etmeli.');
-      } else if (m.includes('invalid') && m.includes('email')) {
-        setErr('E-posta adresi geçersiz görünüyor. Adresi kontrol edip tekrar dene.');
+    setWorking(true);
+    const mail = email.trim().toLowerCase();
+    // Önce giriş dene. Hesap yoksa aynı bilgilerle otomatik oluştur.
+    const first = await supabase.auth.signInWithPassword({ email: mail, password });
+    if (!first.error) { setWorking(false); return; }
+
+    const m = (first.error.message || '').toLowerCase();
+    if (!m.includes('invalid login credentials')) {
+      setErr('Giriş yapılamadı: ' + first.error.message);
+      setWorking(false);
+      return;
+    }
+    const up = await supabase.auth.signUp({ email: mail, password });
+    if (up.error) {
+      const um = (up.error.message || '').toLowerCase();
+      if (up.error.status === 429 || um.includes('rate limit')) {
+        setErr('Kısa sürede çok fazla deneme yapıldı. Biraz bekleyip tekrar dene.');
+      } else if (um.includes('already')) {
+        setErr('Bu e-posta zaten kayıtlı ama şifre yanlış. Şifreyi kontrol et.');
       } else {
-        setErr('E-posta gönderilemedi: ' + error.message);
+        setErr('Hesap oluşturulamadı: ' + up.error.message);
       }
-    } else setSent(true);
+    } else if (!up.data.session) {
+      // E-posta doğrulaması açık olduğunda ya da e-posta başka bir şifreyle kayıtlıyken buraya düşer.
+      setErr('Bu e-posta başka bir şifreyle kayıtlı olabilir ya da hesap doğrulaması bekliyor. Şifreyi kontrol et.');
+    }
+    setWorking(false);
   }
 
   return (
     <main>
       <div className="panel">
         <h1>13. Vuruş</h1>
-        <p>Sisli Liman’da her gece saat on üç kez çalar. Hikâyeye başlamak için e-posta adresini gir.</p>
-        <p className="small">Çocuklar için: giriş bağlantısı ebeveynin e-posta adresine gönderilmelidir.</p>
-        {sent ? (
-          <p>Giriş bağlantısı e-postana gönderildi. Bağlantıya tıklayınca buraya döneceksin.</p>
-        ) : (
-          <>
-            <label htmlFor="email">E-posta</label>
-            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <div className="choices">
-              <button onClick={send} disabled={!email.includes('@')}>Giriş bağlantısı gönder</button>
-            </div>
-            {err && <p role="alert">{err}</p>}
-          </>
-        )}
+        <p>Sisli Liman’da her gece saat on üç kez çalar. Hikâyeye başlamak için e-posta ve şifreni gir. Hesabın yoksa otomatik oluşturulur.</p>
+        <label htmlFor="email">E-posta</label>
+        <input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <label htmlFor="pw">Şifre</label>
+        <input id="pw" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <div className="choices">
+          <button onClick={enter} disabled={working || !email.includes('@') || password.length < 6}>
+            {working ? 'Giriliyor…' : 'Giriş yap'}
+          </button>
+        </div>
+        {err && <p role="alert">{err}</p>}
+        <p className="small">Çocuklar için: e-posta adresi ebeveynin adresi olmalı.</p>
       </div>
     </main>
   );
