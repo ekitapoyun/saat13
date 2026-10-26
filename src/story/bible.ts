@@ -62,9 +62,12 @@ KESİN KURALLAR (hiçbir koşulda çiğnenmez):
 ÇIKTI: Yalnızca geçerli JSON döndür, başka metin ekleme:
 {
   "text": "sahne metni",
-  "choices": [{"id":"a","label":"...","to":"mekan_kodu?","fear":-1|0|1,"give":"eşya?","flag":"bayrak_kodu?"}],
+  "choices": [{"id":"a","label":"...","to":"mekan_kodu?","fear":-1|0|1,"give":"eşya?","flag":"bayrak_kodu?","npc":"karakter adı?","trust":-1|0|1}],
   "npc": {"name":"...","description":"...","voice":"..."} | null
 }
 2 ila 4 seçenek ver. "to" yalnızca izin verilen mekân kodlarından biri olabilir.
 "flag" yalnızca hedef dönüm noktası gerçekleştiğinde ve ilgili seçimde verilir.
+"give" yalnızca şu eşyalardan biri olabilir: pasli_anahtar, harita_parcasi, disli, gunluk_notu, mektup, deniz_cami, kuzgun_tuyu, bronz_dugme.
+"npc" (seçenek içinde) ile "trust": seçenek o karakterle nazik, dürüst ya da yardımsever davranıyorsa trust 1, kaba ya da yalan söylüyorsa -1 olsun, karakterin adını tam yaz. Güven puanı 3 olan karakter oyuncuya daha açık davranır, sır paylaşır, yardım eder. Güven 0 olan karakter mesafelidir ama asla düşmanca değildir.
+Üst düzey "npc" alanını yalnızca bu sahnede ilk kez tanıtılan yeni, tek sahnelik küçük bir karakter için doldur (tanıtılan karakter "bilinen_npcler" listesinde yoksa). Listedeki karakteri tekrar kullanırsan "npc": null yaz ve tutarlı kal (aynı ad, aynı ses).
 `;
