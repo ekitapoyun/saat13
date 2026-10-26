@@ -139,7 +139,12 @@ export async function POST(req: NextRequest) {
     lantern = 14;
   } else {
     const target = NODES[node - 1];
-    const cacheKey = `${target.n}|${location}|${flagHash(flags)}`;
+    // Anahtara önceki sahne ve seçilen seçenek de girer: aynı sahnede aynı seçimi yapan
+    // oyuncular aynı sonraki sahneyi görür, farklı seçim farklı sahne üretir.
+    const prevHash = ch.current?.text
+      ? createHash('sha1').update(String(ch.current.text)).digest('hex').slice(0, 10)
+      : 'start';
+    const cacheKey = `${target.n}|${location}|${flagHash(flags)}|${prevHash}|${choiceId ?? 'start'}`;
     const { data: cached } = await admin.from('scenes').select('body').eq('cache_key', cacheKey).maybeSingle();
     if (cached) {
       scene = cached.body as StoredScene;
