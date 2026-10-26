@@ -26,6 +26,18 @@ export const NODES: Node[] = [
   { n: 20, title: 'Sabah', location: 'yurt', goal: 'Sabah olur, oyuncu yurda döner. Nene Selvi ve Orvel karşılar.', flag: 'sabah' },
 ];
 
+// Karakterlerin sahnede ilk yer alabileceği dönüm noktası. Öncesinde sahneye girmezler,
+// en fazla belirsiz bir iz (ses, gölge, uzaktan bir şekil) görülebilir.
+export const FIRST_APPEARS: Record<string, number> = {
+  'Kaptan Marl': 2,
+  'Madam Pelin Tuzlu': 5,
+  'Çıt': 6,
+  'Kuzgun Teodor': 7,
+  'Gri Hanım': 9,
+  'Üstat Nikolai Brasswick': 15,
+  'Lina': 17,
+};
+
 export const LOCATION_CODES = [
   'yurt', 'bahce', 'mezarlik', 'meydan', 'kulube', 'iskele',
   'kutuphane', 'pazar', 'kayalik', 'kule', 'mekanizma', 'atolye',
