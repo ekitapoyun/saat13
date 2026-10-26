@@ -32,6 +32,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           .row button{padding:6px 10px;font-size:.88rem}
           label{display:block;margin:12px 0 4px;color:var(--mute);font-size:.9rem}
           .small{color:var(--mute);font-size:.85rem}
+          .chip{display:inline-flex;align-items:center;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:.88rem}
+          .chip button{font-size:.78rem}
           @media (prefers-reduced-motion:reduce){*{transition:none!important}}
         `}</style>
       </head>
