@@ -20,19 +20,15 @@ export type Character = {
   fear: number;
   lantern: number;
   items: string[];
+  chapter: number;
+  chapterTitle: string;
+  friends: { name: string; value: number }[];
+  map: {
+    unlocked: string[];
+    travel: string[];
+    target: string | null;
+    pieces: { have: number; total: number; label: string };
+  };
 };
 
-export const LOCATION_NAMES: Record<string, string> = {
-  yurt: 'Sahipsizler Yurdu',
-  bahce: 'Yurt Bahçesi',
-  mezarlik: 'Unutulmuş Mezarlık',
-  meydan: 'Çan Meydanı',
-  kulube: 'Balıkçı Kulübesi',
-  iskele: 'İskele',
-  kutuphane: 'Eski Kütüphane',
-  pazar: 'Pazar Sokağı',
-  kayalik: 'Fener Kayalığı',
-  kule: 'Saat Kulesi',
-  mekanizma: 'Mekanizma Odası',
-  atolye: "Usta'nın Atölyesi",
-};
+export { LOCATION_NAMES } from '@/story/map';
