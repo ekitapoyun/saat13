@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import Anthropic from '@anthropic-ai/sdk';
 import { createHash } from 'crypto';
 import { BIBLE, RULES } from '@/story/bible';
-import { NODES, LOCATION_CODES, ALLOWED_ITEMS } from '@/story/nodes';
+import { NODES, LOCATION_CODES, ALLOWED_ITEMS, FIRST_APPEARS } from '@/story/nodes';
 
 // Durum burada, sunucuda tutulur ve doğrulanır. AI yalnızca öneri yapar.
 const admin = createClient(
@@ -68,7 +68,7 @@ function parseScene(raw: string): StoredScene | null {
   }
 }
 
-async function generate(ch: any, location: string, node: (typeof NODES)[number], steps: number): Promise<{ scene: StoredScene; ok: boolean }> {
+async function generate(ch: any, location: string, node: (typeof NODES)[number], steps: number, chosen?: string): Promise<{ scene: StoredScene; ok: boolean }> {
   const { data: memory } = await admin.from('world_memory').select('name,description,voice').limit(40);
   const state = {
     oyuncu: { ad: ch.name, yetenek: ch.skill, korku: ch.fear, fener: ch.lantern, esyalar: ch.items, bayraklar: Object.keys(ch.flags) },
@@ -76,7 +76,11 @@ async function generate(ch: any, location: string, node: (typeof NODES)[number],
     izinli_mekanlar: LOCATION_CODES,
     hedef_donum_noktasi: { no: node.n, baslik: node.title, mekan: node.location, hedef: node.goal, bitis_bayragi: node.flag },
     bu_donum_noktasinda_kacinci_sahne: steps,
-    son_sahne: ch.current?.text?.slice(0, 600) ?? null,
+    son_sahne: ch.current?.text?.slice(-1200) ?? null,
+    oyuncunun_son_secimi: chosen ?? null,
+    henuz_sahneye_girmeyecek_karakterler: Object.entries(FIRST_APPEARS)
+      .filter(([, first]) => first > node.n)
+      .map(([name]) => name),
     bilinen_npcler: memory ?? [],
   };
   const msg = await ai.messages.create({
@@ -85,7 +89,7 @@ async function generate(ch: any, location: string, node: (typeof NODES)[number],
     system: `${BIBLE}\n${RULES}`,
     messages: [{
       role: 'user',
-      content: `Oyuncunun durumu:\n${JSON.stringify(state)}\n\nBir sonraki sahneyi yaz. Anlatım ikinci tekil şahıs ve şimdiki zaman olsun (“kapıyı itiyorsun”, “Nene Selvi sana bakıyor”). Kısa, sade, doğal ve akıcı Türkçe kullan. Sahnede en fazla bir benzetme olsun. Hikâyeyi her sahnede gözle görülür biçimde ilerlet: yeni bir bilgi, yeni bir kişi ya da yeni bir yer olsun. Oyuncu bu dönüm noktasında ${steps}. sahnede. 3. sahneden itibaren bitiş bayrağını seçeneklerden en az birine MUTLAKA ver ve hikâyeyi hedefe ulaştır.\nYalnızca tek bir JSON nesnesi döndür, öncesine ve sonrasına hiçbir şey yazma. Metin içindeki konuşmalarda düz çift tırnak yerine “ ” kullan. Paragraflar arasına \\n\\n koy. "fear" değeri -1, 0 ya da 1 sayısı olmalı.`,
+      content: `Oyuncunun durumu:\n${JSON.stringify(state)}\n\nBir sonraki sahneyi yaz. Önce oyuncunun son seçimine DOĞRUDAN karşılık ver: seçtiği eylem sahnede gerçekleşsin, sorduğu soru cevaplansın, konuştuğu kişi cevap versin. "henuz_sahneye_girmeyecek_karakterler" listesindeki karakterleri sahneye sokma, yalnızca belirsiz bir iz (uzaktan ses, gölge) göstermen yeterli. Anlatım ikinci tekil şahıs ve şimdiki zaman olsun (“kapıyı itiyorsun”, “Nene Selvi sana bakıyor”). Kısa, sade, doğal ve akıcı Türkçe kullan. Sahnede en fazla bir benzetme olsun. Hikâyeyi her sahnede gözle görülür biçimde ilerlet: yeni bir bilgi, yeni bir kişi ya da yeni bir yer olsun. Oyuncu bu dönüm noktasında ${steps}. sahnede. 3. sahneden itibaren bitiş bayrağını seçeneklerden en az birine MUTLAKA ver ve hikâyeyi hedefe ulaştır.\nYalnızca tek bir JSON nesnesi döndür, öncesine ve sonrasına hiçbir şey yazma. Metin içindeki konuşmalarda düz çift tırnak yerine “ ” kullan. Paragraflar arasına \\n\\n koy. "fear" değeri -1, 0 ya da 1 sayısı olmalı.`,
     }],
   });
   const block = msg.content.find((b) => b.type === 'text');
@@ -115,9 +119,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ scene: publicScene(ch.current), character: toPublic(ch) });
   }
 
+  let chosenLabel: string | undefined;
   if (choiceId) {
     const picked: StoredChoice | undefined = ch.current?.choices?.find((c: StoredChoice) => c.id === choiceId);
     if (!picked) return NextResponse.json({ error: 'Geçersiz seçim' }, { status: 400 });
+    chosenLabel = picked.label;
 
     lantern = Math.max(0, lantern - 1);
     fear = Math.min(4, Math.max(0, fear + (picked.fear ?? 0)));
@@ -155,7 +161,7 @@ export async function POST(req: NextRequest) {
     if (cached) {
       scene = cached.body as StoredScene;
     } else {
-      const made = await generate({ ...ch, location, fear, lantern, items, flags }, location, target, steps);
+      const made = await generate({ ...ch, location, fear, lantern, items, flags }, location, target, steps, chosenLabel);
       scene = made.scene;
       // Yedek sahne asla önbelleğe alınmaz: sonraki istek yeniden denesin.
       if (made.ok) {
