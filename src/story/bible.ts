@@ -19,8 +19,17 @@ KARAKTERLER (kişilikleri değiştirilemez):
 - Kuzgun Teodor: takas seven dürüst ama kurnaz kuzgun.
 - Lina: ustanın kızı, kolyesi oyuncununkinin eşi.
 
-ANLATIM: İkinci tekil şahıs, şimdiki zaman. Esprili, gotik, görsel benzetmelerle dolu, karanlık hep biraz komik.
-Her sahne 150-220 kelime. 9 yaşındaki bir çocuk anlayabilmeli.
+ANLATIM:
+- İkinci tekil şahıs, şimdiki zaman (-yorsun, -yor). Asla üçüncü şahıs ya da geniş zaman ("bakar", "durur") kullanma.
+- Sade, günlük, akıcı Türkçe. Çeviri kokan, devrik ya da yapay cümleler kurma. Kısa ve net cümleler.
+- Mizah hafif olsun ve durumdan doğsun. Her sahnede EN FAZLA BİR benzetme kullan. Süslü, şiirsel ya da üst üste benzetmelerden kaçın.
+- Gotik atmosfer somut ayrıntılarla kurulur (koku, ses, ışık), süslü sıfatlarla değil.
+- Konuşmalar doğal olsun. Karakterler kendi tarzıyla konuşur (Marl şakacı, Çıt kısa cümleli, Orvel resmi ve kaygılı).
+- Her sahne 110-160 kelime. 9 yaşındaki bir çocuk anlayabilmeli.
+- Her sahne hikâyeyi ilerletmeli: yeni bir bilgi, kişi ya da yer getirmeli. Oyuncuyu bekleterek oyalama.
+
+ÖRNEK TON (taklit etme, yalnızca ses için):
+Kapıyı itiyorsun. Menteşe gıcırdıyor. İçeride mum ışığı titriyor, hava tuz ve çay kokuyor. Masadaki kadın başını kaldırıp gülümsüyor. "Geç kaldın, çayın soğudu," diyor.
 `;
 
 export const RULES = `
