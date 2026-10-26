@@ -107,6 +107,7 @@ async function generate(ch: any, location: string, node: (typeof NODES)[number],
     hedef_donum_noktasi: { no: node.n, baslik: node.title, mekan: node.location, hedef: node.goal, bitis_bayragi: node.flag },
     bu_donum_noktasinda_kacinci_sahne: steps,
     yeni_gece_basladi: Boolean(ch.current?.night),
+    korkudan_yurda_dondu: Boolean(ch.scared),
     son_sahne: ch.current?.text?.slice(-1200) ?? null,
     oyuncunun_son_secimi: chosen ?? null,
     henuz_sahneye_girmeyecek_karakterler: Object.entries(FIRST_APPEARS)
@@ -120,7 +121,7 @@ async function generate(ch: any, location: string, node: (typeof NODES)[number],
     system: `${BIBLE}\n${RULES}`,
     messages: [{
       role: 'user',
-      content: `Oyuncunun durumu:\n${JSON.stringify(state)}\n\nBir sonraki sahneyi yaz. Eğer "yeni_gece_basladi" doğruysa oyuncu uyuyup yeni geceye uyandı: sahneyi kısa bir uyanışla aç (Nene Selvi feneri yağla dolduruyor, sıcak bir ayrıntı), sonra daha önce bulunan ipuçlarını hatırlayarak hikâyeyi kaldığı yerden sürdür. Aksi durumda önce oyuncunun son seçimine DOĞRUDAN karşılık ver: seçtiği eylem sahnede gerçekleşsin, sorduğu soru cevaplansın, konuştuğu kişi cevap versin. "henuz_sahneye_girmeyecek_karakterler" listesindeki karakterleri sahneye sokma, yalnızca belirsiz bir iz (uzaktan ses, gölge) göstermen yeterli. Anlatım ikinci tekil şahıs ve şimdiki zaman olsun (“kapıyı itiyorsun”, “Nene Selvi sana bakıyor”). Kısa, sade, doğal ve akıcı Türkçe kullan. Sahnede en fazla bir benzetme olsun. Hikâyeyi her sahnede gözle görülür biçimde ilerlet: yeni bir bilgi, yeni bir kişi ya da yeni bir yer olsun. Oyuncu bu dönüm noktasında ${steps}. sahnede. 3. sahneden itibaren bitiş bayrağını seçeneklerden en az birine MUTLAKA ver ve hikâyeyi hedefe ulaştır.\nGerilim ve gizem ekle: sahneyi açık kalan bir soru ya da küçük bir ürperti (tuhaf ses, kıpırdayan gölge, kaybolan eşya) ile bitir. Seçenekler gerçek ikilem olsun (biri merak, biri temkin; her birinin bedeli ve getirisi olsun, hiçbiri bariz olmasın). Ürpertici bir şeye yaklaşan ya da dokunan seçeneğe "fear": 1 ver, rahatlatan seçeneğe (dost bir yüz, ışık, espri) -1. Seçeneklerin en az birine "fear": 1 ver. Dehşet, kan ve gerçek tehlike olmasın, ürperti hep güvenli ve biraz komik kalsın.\nYalnızca tek bir JSON nesnesi döndür, öncesine ve sonrasına hiçbir şey yazma. Metin içindeki konuşmalarda düz çift tırnak yerine “ ” kullan. Paragraflar arasına \\n\\n koy. "fear" değeri -1, 0 ya da 1 sayısı olmalı.`,
+      content: `Oyuncunun durumu:\n${JSON.stringify(state)}\n\nBir sonraki sahneyi yaz. Eğer "yeni_gece_basladi" doğruysa oyuncu uyuyup yeni geceye uyandı: sahneyi kısa bir uyanışla aç (Nene Selvi feneri yağla dolduruyor, sıcak bir ayrıntı), sonra daha önce bulunan ipuçlarını hatırlayarak hikâyeyi kaldığı yerden sürdür. Eğer "korkudan_yurda_dondu" doğruysa oyuncu çok ürkerek yurda koştu: sahneyi Nene Selvi'nin onu sakinleştirmesiyle aç (sıcak bir içecek, battaniye), sonra hikâyeyi kaldığı yerden sürdür. Aksi durumda önce oyuncunun son seçimine DOĞRUDAN karşılık ver: seçtiği eylem sahnede gerçekleşsin, sorduğu soru cevaplansın, konuştuğu kişi cevap versin. "henuz_sahneye_girmeyecek_karakterler" listesindeki karakterleri sahneye sokma, yalnızca belirsiz bir iz (uzaktan ses, gölge) göstermen yeterli. Anlatım ikinci tekil şahıs ve şimdiki zaman olsun (“kapıyı itiyorsun”, “Nene Selvi sana bakıyor”). Kısa, sade, doğal ve akıcı Türkçe kullan. Sahnede en fazla bir benzetme olsun. Hikâyeyi her sahnede gözle görülür biçimde ilerlet: yeni bir bilgi, yeni bir kişi ya da yeni bir yer olsun. Oyuncu bu dönüm noktasında ${steps}. sahnede. 3. sahneden itibaren bitiş bayrağını seçeneklerden en az birine MUTLAKA ver ve hikâyeyi hedefe ulaştır.\nGerilim ve gizem ekle: sahneyi açık kalan bir soru ya da küçük bir ürperti (tuhaf ses, kıpırdayan gölge, kaybolan eşya) ile bitir. Seçenekler gerçek ikilem olsun (biri merak, biri temkin; her birinin bedeli ve getirisi olsun, hiçbiri bariz olmasın). Ürpertici bir şeye yaklaşan ya da dokunan seçeneğe "fear": 1 ver, rahatlatan seçeneğe (dost bir yüz, ışık, espri) -1. Seçeneklerin en az birine "fear": 1 ver. Dehşet, kan ve gerçek tehlike olmasın, ürperti hep güvenli ve biraz komik kalsın.\nYalnızca tek bir JSON nesnesi döndür, öncesine ve sonrasına hiçbir şey yazma. Metin içindeki konuşmalarda düz çift tırnak yerine “ ” kullan. Paragraflar arasına \\n\\n koy. "fear" değeri -1, 0 ya da 1 sayısı olmalı.`,
     }],
   });
   const block = msg.content.find((b) => b.type === 'text');
@@ -151,6 +152,7 @@ export async function POST(req: NextRequest) {
   }
 
   let chosenLabel: string | undefined;
+  let scared = false;
   if (choiceId) {
     const picked: StoredChoice | undefined = ch.current?.choices?.find((c: StoredChoice) => c.id === choiceId);
     if (!picked) return NextResponse.json({ error: 'Geçersiz seçim' }, { status: 400 });
@@ -159,17 +161,21 @@ export async function POST(req: NextRequest) {
     if (picked.id !== 'rest') lantern = Math.max(0, lantern - 1);
     fear = Math.min(4, Math.max(0, fear + (picked.fear ?? 0)));
     if (picked.give && !items.includes(picked.give) && items.length < 8) items.push(picked.give);
-    if (picked.flag) flags[picked.flag] = true;
+    // Yalnızca şu anki dönüm noktasının bayrağı kabul edilir. Modelin icat ettiği ya da
+    // ileriki bir noktanın bayrağı hikâyeyi atlatamaz.
+    if (picked.flag && picked.flag === NODES[node - 1]?.flag) flags[picked.flag] = true;
     // Korku kuralları kodda: tekinsiz mekâna girmek ve fener yağının azalması korkuyu artırır.
     const spooky = ['mezarlik', 'kayalik', 'mekanizma', 'atolye'];
     if (picked.to && picked.to !== location && spooky.includes(picked.to)) fear = Math.min(4, fear + 1);
     if (lantern === 4 || lantern === 2) fear = Math.min(4, fear + 1);
     if (picked.to) location = picked.to;
     const cur = NODES[node - 1];
+    // Güvenlik ağı: oyuncu bir dönüm noktasında 5 sahneden fazla kalırsa hikâye kendiliğinden ilerler.
+    if (cur && !flags[cur.flag] && (ch.current?.steps ?? 0) >= 5) flags[cur.flag] = true;
     if (cur && flags[cur.flag]) node += 1;
 
     // Korku sınırı: ceza yok, yumuşak dönüş.
-    if (fear >= 4) { location = 'yurt'; fear = 0; lantern = Math.min(14, lantern + 4); }
+    if (fear >= 4) { location = 'yurt'; fear = 0; lantern = Math.min(14, lantern + 4); scared = true; }
   }
 
   // Oyuncunun bu dönüm noktasında kaçıncı sahnede olduğu (AI'ı ilerlemeye zorlamak için).
@@ -193,12 +199,12 @@ export async function POST(req: NextRequest) {
     const prevHash = ch.current?.text
       ? createHash('sha1').update(String(ch.current.text)).digest('hex').slice(0, 10)
       : 'start';
-    const cacheKey = `${target.n}|${location}|${flagHash(flags)}|${prevHash}|${choiceId ?? 'start'}`;
+    const cacheKey = `${target.n}|${location}|${flagHash(flags)}|${prevHash}|${choiceId ?? 'start'}|${scared ? 's' : ''}`;
     const { data: cached } = await admin.from('scenes').select('body').eq('cache_key', cacheKey).maybeSingle();
     if (cached) {
       scene = cached.body as StoredScene;
     } else {
-      const made = await generate({ ...ch, location, fear, lantern, items, flags }, location, target, steps, chosenLabel);
+      const made = await generate({ ...ch, location, fear, lantern, items, flags, scared },location, target, steps, chosenLabel);
       scene = made.scene;
       // Yedek sahne asla önbelleğe alınmaz: sonraki istek yeniden denesin.
       if (made.ok) {
