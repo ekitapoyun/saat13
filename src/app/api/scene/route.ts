@@ -45,8 +45,11 @@ function flagHash(flags: Record<string, unknown>) {
 
 function parseScene(raw: string): StoredScene | null {
   try {
-    const cleaned = raw.replace(/```json|```/g, '').trim();
-    const j = JSON.parse(cleaned);
+    // Modelin JSON'un öncesine ya da sonrasına eklediği metni at: ilk { ile son } arası.
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start < 0 || end <= start) throw new Error('JSON bulunamadı');
+    const j = JSON.parse(raw.slice(start, end + 1));
     if (typeof j.text !== 'string' || j.text.length < 40 || j.text.length > 2500) return null;
     if (!Array.isArray(j.choices) || j.choices.length < 2 || j.choices.length > 4) return null;
     const choices: StoredChoice[] = j.choices.map((c: any, i: number): StoredChoice => ({
@@ -59,12 +62,13 @@ function parseScene(raw: string): StoredScene | null {
     }));
     if (choices.some((c) => !c.label)) return null;
     return { text: j.text, choices };
-  } catch {
+  } catch (e) {
+    console.error('Sahne ayrıştırılamadı:', e instanceof Error ? e.message : e, '| ham çıktı:', raw.slice(0, 1500));
     return null;
   }
 }
 
-async function generate(ch: any, location: string, node: (typeof NODES)[number]): Promise<StoredScene> {
+async function generate(ch: any, location: string, node: (typeof NODES)[number]): Promise<{ scene: StoredScene; ok: boolean }> {
   const { data: memory } = await admin.from('world_memory').select('name,description,voice').limit(40);
   const state = {
     oyuncu: { ad: ch.name, yetenek: ch.skill, korku: ch.fear, fener: ch.lantern, esyalar: ch.items, bayraklar: Object.keys(ch.flags) },
@@ -76,16 +80,17 @@ async function generate(ch: any, location: string, node: (typeof NODES)[number])
   };
   const msg = await ai.messages.create({
     model: MODEL,
-    max_tokens: 1200,
+    max_tokens: 2500,
     system: `${BIBLE}\n${RULES}`,
     messages: [{
       role: 'user',
-      content: `Oyuncunun durumu:\n${JSON.stringify(state)}\n\nBir sonraki sahneyi yaz. Oyuncuyu hedef dönüm noktasına yaklaştır ama acele ettirme.`,
+      content: `Oyuncunun durumu:\n${JSON.stringify(state)}\n\nBir sonraki sahneyi yaz. Oyuncuyu hedef dönüm noktasına yaklaştır ama acele ettirme.\nYalnızca tek bir JSON nesnesi döndür, öncesine ve sonrasına hiçbir şey yazma. Metin içindeki konuşmalarda düz çift tırnak yerine “ ” kullan. Paragraflar arasına \\n\\n koy. "fear" değeri -1, 0 ya da 1 sayısı olmalı.`,
     }],
   });
   const block = msg.content.find((b) => b.type === 'text');
   const scene = block && block.type === 'text' ? parseScene(block.text) : null;
-  return scene ?? fallbackScene(location);
+  if (!scene) return { scene: fallbackScene(location), ok: false };
+  return { scene, ok: true };
 }
 
 export async function POST(req: NextRequest) {
@@ -139,8 +144,12 @@ export async function POST(req: NextRequest) {
     if (cached) {
       scene = cached.body as StoredScene;
     } else {
-      scene = await generate({ ...ch, location, fear, lantern, items, flags }, location, target);
-      await admin.from('scenes').upsert({ cache_key: cacheKey, location, node: target.n, body: scene }, { onConflict: 'cache_key' });
+      const made = await generate({ ...ch, location, fear, lantern, items, flags }, location, target);
+      scene = made.scene;
+      // Yedek sahne asla önbelleğe alınmaz: sonraki istek yeniden denesin.
+      if (made.ok) {
+        await admin.from('scenes').upsert({ cache_key: cacheKey, location, node: target.n, body: scene }, { onConflict: 'cache_key' });
+      }
     }
   }
 
