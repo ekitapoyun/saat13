@@ -1,33 +1,151 @@
-// 20 dönüm noktası. Her oyuncu bunlara sırayla uğrar. AI aralarındaki yolu doldurur.
+// Dönüm noktaları. Her oyuncu bunlara sırayla uğrar. AI aralarındaki yolu doldurur.
 // "flag" gerçekleşince oyuncu bir sonraki dönüm noktasına geçer.
+// hint: Gözlemci / Tamirci yeteneği açılınca gösterilen elle yazılmış ipucu.
+// talk: Konuşkan yeteneği açılınca gösterilen elle yazılmış cümle. npc varsa güven puanı da artar.
 
-export type Node = { n: number; title: string; location: string; goal: string; flag: string };
+import { AI_ITEMS } from './items';
+
+export type Node = {
+  n: number; title: string; location: string; goal: string; flag: string;
+  hint: string; talk: string; npc?: string;
+};
 
 export const NODES: Node[] = [
-  { n: 1, title: 'Fener', location: 'yurt', goal: 'Gece yarısı 13. vuruşu duyar. Nene Selvi feneri verir ve "yağı bitmeden dön" der.', flag: 'selvi_izin' },
-  { n: 2, title: 'Süzülen şapka', location: 'bahce', goal: 'Bahçede havada süzülen bir şapka ve saydam bir el görür. Korkmadan karşılık verir.', flag: 'hayalet_gordu' },
-  { n: 3, title: 'Çan Meydanı', location: 'meydan', goal: 'Meydanda başka çocuklarla karşılaşabilir. Selamlaşma ya da hikâye birleştirme önerilir.', flag: 'meydana_geldi' },
-  { n: 4, title: 'Kaptan Marl', location: 'mezarlik', goal: 'Marl ile tanışır, harita bilmecesini alır.', flag: 'marl_tanisti' },
-  { n: 5, title: 'Balıkçı Kulübesi', location: 'kulube', goal: 'Madam Tuzlu, birinci harita parçası ve paslı anahtar.', flag: 'pasli_anahtar' },
-  { n: 6, title: 'Kule kapısı', location: 'kule', goal: 'Çıt ile tanışır. Eksik dişli görevi başlar.', flag: 'cit_tanisti' },
-  { n: 7, title: 'Pazar Sokağı', location: 'pazar', goal: 'Kuzgun Teodor ile takas yapar, eksik dişliyi alır.', flag: 'disli_alindi' },
-  { n: 8, title: 'Eski Kütüphane', location: 'kutuphane', goal: 'Ustanın günlüğünü okur, Lina ipucunu bulur.', flag: 'gunluk_okundu' },
-  { n: 9, title: 'Gri Hanım', location: 'mezarlik', goal: 'Gri Hanım yarım kalmış sözünü anlatır, oyuncu Lina’ya iletmeyi öğrenir.', flag: 'gri_mesaji' },
-  { n: 10, title: 'Bay Orvel', location: 'meydan', goal: 'Orvel çocukları endişeyle arar. Oyuncu ona güvenip yardım isteyebilir. Zamana karşı bulmaca.', flag: 'orvel_guveni' },
-  { n: 11, title: 'Fener Kayalığı', location: 'kayalik', goal: 'Gelgit alçalınca mağarada ikinci harita parçasını bulur (bilmece: saat).', flag: 'parca_2' },
-  { n: 12, title: 'Kolye', location: 'kule', goal: 'Çıt kolyenin dişlisinin eşini fark eder. Oyuncu güvendiği biriyle konuşabilir.', flag: 'kolye_ipucu' },
-  { n: 13, title: 'Mekanizma Odası', location: 'mekanizma', goal: 'Dişliyi takar, mekanizma bulmacasını çözer, müzik kutusu melodisini duyar.', flag: 'mekanizma_acik' },
-  { n: 14, title: 'Üçüncü parça', location: 'mekanizma', goal: 'Üçüncü harita parçasını bulur, gizli geçit açılır.', flag: 'gecit_acik' },
-  { n: 15, title: "Usta'nın Atölyesi", location: 'atolye', goal: 'Nikolai Brasswick ile karşılaşır.', flag: 'usta_bulundu' },
-  { n: 16, title: "Orvel'in itirafı", location: 'atolye', goal: 'Orvel gerçeği anlatır. Oyuncu onu anlayışla karşılar.', flag: 'orvel_itiraf' },
-  { n: 17, title: 'Lina', location: 'atolye', goal: 'Lina belirir. Kolye eşleşir. Gri Hanım’ın mesajı iletilir.', flag: 'lina_bulundu' },
-  { n: 18, title: 'Büyük seçim', location: 'mekanizma', goal: 'Oyuncu saati durdurur, onarır ya da sırrı kasabayla paylaşır. Üçü de doğru ve olumludur.', flag: 'buyuk_secim' },
-  { n: 19, title: 'Son vuruş', location: 'kule', goal: 'Seçimin sonucu: son vuruş, hayaletlerle veda ya da ziyaret zamanı.', flag: 'son_vurus' },
-  { n: 20, title: 'Sabah', location: 'yurt', goal: 'Sabah olur, oyuncu yurda döner. Nene Selvi ve Orvel karşılar.', flag: 'sabah' },
+  { n: 1, title: 'Fener', location: 'yurt', flag: 'selvi_izin', npc: 'Nene Selvi',
+    goal: 'Gece yarısı 13. vuruşu duyar. Nene Selvi feneri verir ve "yağı bitmeden dön" der.',
+    hint: 'Nene Selvi’nin cebinden fener yağı şişesi kokusu geliyor. Feneri alırsan yola çıkabilirsin.',
+    talk: 'Nene Selvi gülümsüyor: “Merak etmen güzel. Fener seni korur, sen de onu koru.”' },
+  { n: 2, title: 'Süzülen şapka', location: 'bahce', flag: 'hayalet_gordu', npc: 'Kaptan Marl',
+    goal: 'Bahçede havada süzülen bir şapka ve saydam bir el görür. Korkmadan karşılık verir.',
+    hint: 'Şapka sana doğru değil, çitin ardındaki mezarlığa doğru eğiliyor. Sanki yolu gösteriyor.',
+    talk: 'Şapka bir kez selam verir gibi eğiliyor. Birinin sana iyi niyetle baktığını hissediyorsun.' },
+  { n: 3, title: 'Çan Meydanı', location: 'meydan', flag: 'meydana_geldi',
+    goal: 'Meydanda başka çocuklarla karşılaşabilir. Selamlaşma ya da hikâye birleştirme önerilir.',
+    hint: 'Meydandaki çeşmenin taşında fenerinle aynı işaret oyulu: küçük bir saat. Bu işaret seni yönlendiriyor.',
+    talk: 'Bir simitçi fısıldıyor: “Geceleri çan çalmadan önce mezarlıktan gülme sesi gelir. Korkma, o ses sana yol gösterir.”' },
+  { n: 4, title: 'Kaptan Marl', location: 'mezarlik', flag: 'marl_tanisti', npc: 'Kaptan Marl',
+    goal: 'Marl ile tanışır, harita bilmecesini alır.',
+    hint: 'Mezar taşlarından birinin üstünde taze bir deniz kabuğu duruyor. Marl’ın oradan seslendiğini fark ediyorsun.',
+    talk: 'Marl kahkaha atıyor: “Bu kadar kibar bir çocuk görmeyeli yüz yıl oldu! Haritayı sana bilmeceyle vereceğim.”' },
+  { n: 5, title: 'Balıkçı Kulübesi', location: 'kulube', flag: 'pasli_anahtar', npc: 'Madam Pelin Tuzlu',
+    goal: 'Madam Tuzlu, birinci harita parçası ve paslı anahtar.',
+    hint: 'Kulübenin kapısındaki çapa şeklinde kabartma gevşek. Altında bir şey parlıyor.',
+    talk: 'Madam Tuzlu çayını uzatıyor: “Dürüst çocuklara anahtarı vermek benim işim. Önce çayını iç.”' },
+  { n: 6, title: 'Kule kapısı', location: 'kule', flag: 'cit_tanisti', npc: 'Çıt',
+    goal: 'Çıt ile tanışır. Eksik dişli görevi başlar.',
+    hint: 'Kapının kilidi yağlı ve temiz. Biri düzenli olarak bakım yapıyor. Tıkırtılar kapının içinden geliyor.',
+    talk: 'Çıt kısa kısa tıkırdıyor: “Dişli yok. Yardım. Sen iyi.” Sana güvenmeye başladığını anlıyorsun.' },
+  { n: 7, title: 'Pazar Sokağı', location: 'pazar', flag: 'disli_alindi', npc: 'Kuzgun Teodor',
+    goal: 'Kuzgun Teodor ile takas yapar, eksik dişliyi alır.',
+    hint: 'Teodor parlak şeylere bayılıyor. Elindeki küçük bir hatıra ona yetebilir.',
+    talk: 'Teodor kanat çırpıyor: “Dürüst takas severim. Bana bir hatıra göster, dişliyi beraber bulalım.”' },
+  { n: 8, title: 'Eski Kütüphane', location: 'kutuphane', flag: 'gunluk_okundu',
+    goal: 'Ustanın günlüğünü okur, Lina ipucunu bulur.',
+    hint: 'Raflardan birinin tozu silinmiş. Orada son zamanlarda biri kitap karıştırmış. Günlük en alt rafta olabilir.',
+    talk: 'Yaşlı kütüphane kedisi miyavlıyor ve en alt rafa doğru yürüyor. Onu takip etmek iyi bir fikir.' },
+  { n: 9, title: 'Gri Hanım', location: 'mezarlik', flag: 'gri_mesaji', npc: 'Gri Hanım',
+    goal: 'Gri Hanım yarım kalmış sözünü anlatır, oyuncu Lina’ya iletmeyi öğrenir.',
+    hint: 'Gri Hanım’ın solgun eli bir mezar taşının üstünde duruyor. Orada bir isim silinmeye başlamış.',
+    talk: 'Gri Hanım yumuşak bir sesle: “Uzun zamandır kimse beni dinlemedi. Sen dinleyeceksin, değil mi?”' },
+  { n: 10, title: 'Bay Orvel', location: 'meydan', flag: 'orvel_guveni', npc: 'Bay Orvel',
+    goal: 'Orvel çocukları endişeyle arar. Oyuncu ona güvenip yardım isteyebilir. Zamana karşı bulmaca.',
+    hint: 'Orvel’in anahtarlığından bir anahtar eksik. Eli sürekli o boşluğa gidiyor. Gerçeği saklamıyor, korkuyor.',
+    talk: 'Orvel iç çekiyor: “Biri bana güvenip yardım isterse o kadar rahatlarım ki…” Sesi titriyor ama iyi niyetli.' },
+  { n: 11, title: 'Fener Kayalığı', location: 'kayalik', flag: 'parca_2',
+    goal: 'Gelgit alçalınca mağarada ikinci harita parçasını bulur (bilmece: saat).',
+    hint: 'Su çekildikçe kayada yarım bir saat kadranı beliriyor. Parça tam üçte, kadranın göstergesinde.',
+    talk: 'Bir martı sana bakıp tam üç kez ötüyor. Üç sayısı önemli olabilir.' },
+  { n: 12, title: 'Kolye', location: 'kule', flag: 'kolye_ipucu', npc: 'Çıt',
+    goal: 'Çıt kolyenin dişlisinin eşini fark eder. Oyuncu güvendiği biriyle konuşabilir.',
+    hint: 'Kolyenin dişlisi, kulenin kapısındaki dişliyle aynı dişe sahip. Eşleşiyorlar.',
+    talk: 'Çıt kolyeye bakıp heyecanla tıkırdıyor: “Eş. Aynı. Usta.” Sana bir adım daha yaklaşıyor.' },
+  { n: 13, title: 'Mekanizma Odası', location: 'mekanizma', flag: 'mekanizma_acik',
+    goal: 'Dişliyi takar, mekanizma bulmacasını çözer, müzik kutusu melodisini duyar.',
+    hint: 'Dişlilerin üstündeki oklar aynı yöne bakmıyor. Küçük dişliden büyüğe doğru sırayla çevir.',
+    talk: 'Müzik kutusu kendi kendine üç nota çalıyor ve susuyor. Melodiyi aklında tut.' },
+  { n: 14, title: 'Üçüncü parça', location: 'mekanizma', flag: 'gecit_acik',
+    goal: 'Üçüncü harita parçasını bulur, gizli geçit açılır.',
+    hint: 'Duvardaki saat resminin çerçevesi sıcak. Arkasından hafif bir hava esiyor.',
+    talk: 'Çıt arkandan fısıldıyor: “Duvar. Saat. Bas.” Küçük dostun doğru yolda.' },
+  { n: 15, title: "Usta'nın Atölyesi", location: 'atolye', flag: 'usta_bulundu', npc: 'Üstat Nikolai Brasswick',
+    goal: 'Nikolai Brasswick ile karşılaşır.',
+    hint: 'Tezgâhın üstündeki aletler yarım kalmış bir işin ortasında bırakılmış. Usta uzun zamandır burada.',
+    talk: 'Brasswick yorgun gülümsüyor: “Beni bulan ilk çocuk sensin. Teşekkür ederim.”' },
+  { n: 16, title: "Orvel'in itirafı", location: 'atolye', flag: 'orvel_itiraf', npc: 'Bay Orvel',
+    goal: 'Orvel gerçeği anlatır. Oyuncu onu anlayışla karşılar.',
+    hint: 'Orvel’in gözleri kızarmış. Sürekli yere bakıyor. Onu yargılamadan dinlemek en iyi yol.',
+    talk: 'Orvel derin bir nefes alıyor: “Korktuğum için saklamıştım. Senden bu kadar anlayış beklemiyordum.”' },
+  { n: 17, title: 'Lina', location: 'atolye', flag: 'lina_bulundu', npc: 'Lina',
+    goal: 'Lina belirir. Kolye eşleşir. Gri Hanım’ın mesajı iletilir.',
+    hint: 'Lina’nın boynundaki kolyenin yarım dişlisi, senin bulduğun yarıyla birleşecek gibi.',
+    talk: 'Lina utangaç gülüyor: “Sana güveniyorum. Gri Hanım’ın mesajını söylersen çok sevinirim.”' },
+  { n: 18, title: 'Büyük seçim', location: 'mekanizma', flag: 'buyuk_secim',
+    goal: 'Oyuncu saati durdurur, onarır ya da sırrı kasabayla paylaşır. Üçü de doğru ve olumludur.',
+    hint: 'Üç yol da güvenli: durdurmak, onarmak ya da sırrı paylaşmak. Birini seç, hiçbiri yanlış değil.',
+    talk: 'Lina elini tutuyor: “Hangisini seçersen seç, yanındayım.”' },
+  { n: 19, title: 'Son vuruş', location: 'kule', flag: 'son_vurus',
+    goal: 'Seçimin sonucu: son vuruş, hayaletlerle veda ya da ziyaret zamanı.',
+    hint: 'Saatin akrebi son vuruşa yaklaşıyor. Hayaletler seni seyrediyor ve gülümsüyor.',
+    talk: 'Marl uzaktan el sallıyor: “Güle güle, kıymetli yoldaş!”' },
+  { n: 20, title: 'Sabah', location: 'yurt', flag: 'sabah', npc: 'Nene Selvi',
+    goal: 'Sabah olur, oyuncu yurda döner. Nene Selvi ve Orvel karşılar.',
+    hint: 'Pencereden sızan ilk güneş ışığı sisi eritiyor. Mutfaktan taze ekmek kokusu geliyor.',
+    talk: 'Nene Selvi sarılıyor: “Seni bekledim. Gel, kahvaltı hazır.”' },
 ];
 
-// Karakterlerin sahnede ilk yer alabileceği dönüm noktası. Öncesinde sahneye girmezler,
-// en fazla belirsiz bir iz (ses, gölge, uzaktan bir şekil) görülebilir.
+// 2. bölüm: Çanın Dili. Tüm yerler açık, tüm karakterler sahneye girebilir.
+export const NODES2: Node[] = [
+  { n: 1, title: 'Sessiz sabah', location: 'yurt', flag: 'c2_sessizlik', npc: 'Nene Selvi',
+    goal: 'Sabah çan çalmaz. Nene Selvi bunu tuhaf bulur. Çocuklar meydana bakmaya karar verir.',
+    hint: 'Pencereden meydandaki saatin ibresi duruyor. Ses yok, yalnızca martılar var.',
+    talk: 'Nene Selvi kaşlarını çatıyor: “Çan çalmadı. Bu hiç olmaz. Bak bakalım ne olmuş.”' },
+  { n: 2, title: 'Eksik dil', location: 'meydan', flag: 'c2_dil_kayip', npc: 'Bay Orvel',
+    goal: 'Çan Meydanı’nda çanın dili yok. Orvel endişeli. Çan dilinin üç parçaya ayrıldığı fark edilir.',
+    hint: 'Çanın içi boş, yalnızca ince bir zincir sallanıyor. Zincirin ucunda küçük bir not var.',
+    talk: 'Orvel mırıldanıyor: “Bu sefer ben yapmadım, yemin ederim. Yardım eder misin?”' },
+  { n: 3, title: 'Kuzgunların gördüğü', location: 'pazar', flag: 'c2_kuzgun', npc: 'Kuzgun Teodor',
+    goal: 'Teodor ve kuzgunlar dilin ilk parçasını iskelede parlarken görmüş. Takasla bilgi alınır.',
+    hint: 'Teodor’un kuzgunları iskele yönüne bakıp ötüyor. İlk iz orada.',
+    talk: 'Teodor kıkırdıyor: “Parlayan bir şey gördük. İskelede, tahtanın altında!”' },
+  { n: 4, title: 'Çan kayıtları', location: 'kutuphane', flag: 'c2_kayit', npc: 'Lina',
+    goal: 'Lina ile eski çan kayıtlarını okurlar. Çanın dilinin üç parçası: bakır, gümüş, bronz.',
+    hint: 'Defterde üç renkli harf var: bakır, gümüş, bronz. Üç parçayı sırayla bulmak gerekiyor.',
+    talk: 'Lina defteri açıyor: “Birlikte bakarsak daha çabuk buluruz.”' },
+  { n: 5, title: 'Bakır parça', location: 'iskele', flag: 'c2_bakir',
+    goal: 'İskelede tahta aralığında bakır parça bulunur. Gelgit zamanı baskısı hafif.',
+    hint: 'Tahtalardan birinin rengi farklı. Su yükselmeden önce altına bak.',
+    talk: 'Bir balıkçı sakin sakin: “Gelgit gelmeden aç gözünü, bulursun.”' },
+  { n: 6, title: 'Gümüş parça', location: 'kayalik', flag: 'c2_gumus',
+    goal: 'Fener Kayalığı’nda mağarada gümüş parça. Küçük cesaret sınavı, ürpertici ama güvenli.',
+    hint: 'Mağaranın duvarında yansıyan ışık gümüşi. Işığın geldiği yöne yürü.',
+    talk: 'Martı sana eşlik ediyor. Işığın olduğu köşeye doğru yürüyor.' },
+  { n: 7, title: 'Gri Hanım’ın armağanı', location: 'mezarlik', flag: 'c2_gri', npc: 'Gri Hanım',
+    goal: 'Gri Hanım bronz parçanın yerini bilir. Karşılığında küçük bir iyilik ister: bir mesajı iletmek.',
+    hint: 'Gri Hanım’ın gösterdiği mezar taşının yanında toprak yumuşak. Orada bir şey var.',
+    talk: 'Gri Hanım gülümsüyor: “Dostluk gösterene hep yardım ederim.”' },
+  { n: 8, title: 'Çanın dili', location: 'atolye', flag: 'c2_onarim', npc: 'Üstat Nikolai Brasswick',
+    goal: 'Brasswick üç parçayı birleştirir. Oyuncu ve dostları yardım eder.',
+    hint: 'Üç parça sırayla: bakır, gümüş, bronz. Usta’nın örsünde yer hazır.',
+    talk: 'Brasswick eldivenlerini çıkarıyor: “Birlikte yapalım. Sen de çekiçle bir vuruş yap.”' },
+  { n: 9, title: 'Sabah çanı', location: 'kule', flag: 'c2_son', npc: 'Lina',
+    goal: 'Çanın dili takılır, çan sabahı müjdeler. Kasaba toplanır, herkes birlikte kutlar.',
+    hint: 'Çan ipine herkes birlikte asılıyor. Birlikte çekersen çan çalar.',
+    talk: 'Lina el sıkıyor: “Hep birlikte!”' },
+];
+
+export const CHAPTERS: Record<number, { title: string; nodes: Node[]; intro: string }> = {
+  1: { title: '13. Vuruş', nodes: NODES, intro: '' },
+  2: {
+    title: 'Çanın Dili',
+    nodes: NODES2,
+    intro: 'Birinci bölümde 13. vuruşun sırrı çözüldü: Usta Nikolai Brasswick ile Lina birbirine kavuştu, hayaletler huzur buldu, sis inceldi. Şimdi yeni bir bulmaca var: Çan Meydanı’ndaki çanın dili kayboldu. Kuzgunlar, kütüphane kayıtları ve eski dostlar yardım eder. Sis Kâhyası yine uzaktan izler ama zarar vermez.',
+  },
+};
+
+export const nodesOf = (chapter: number): Node[] => CHAPTERS[chapter]?.nodes ?? NODES;
+
+// Karakterlerin sahnede ilk yer alabileceği dönüm noktası (yalnızca 1. bölüm). Öncesinde sahneye
+// girmezler, en fazla belirsiz bir iz (ses, gölge, uzaktan bir şekil) görülebilir.
 export const FIRST_APPEARS: Record<string, number> = {
   'Kaptan Marl': 2,
   'Madam Pelin Tuzlu': 5,
@@ -44,4 +162,22 @@ export const LOCATION_CODES = [
 ];
 
 // AI yalnızca bu eşyaları verebilir.
-export const ALLOWED_ITEMS = ['pasli_anahtar', 'harita_parcasi', 'disli', 'gunluk_notu', 'mektup'];
+export const ALLOWED_ITEMS = AI_ITEMS;
+
+// Güven puanı takip edilen bilinen karakterler. Puan 0-5, güven 3'e ulaşınca hediye verir.
+export const KNOWN_NPCS = [
+  'Nene Selvi', 'Bay Orvel', 'Kaptan Marl', 'Madam Pelin Tuzlu', 'Çıt',
+  'Kuzgun Teodor', 'Gri Hanım', 'Üstat Nikolai Brasswick', 'Lina',
+];
+
+export const NPC_GIFTS: Record<string, { item: string; text: string }> = {
+  'Nene Selvi': { item: 'kurabiye', text: 'Nene Selvi sana taze bir kurabiye uzatıyor.' },
+  'Kaptan Marl': { item: 'deniz_cami', text: 'Kaptan Marl sana mavi bir deniz camı veriyor: “Şans getirir.”' },
+  'Madam Pelin Tuzlu': { item: 'yag_sisesi', text: 'Madam Tuzlu sana küçük bir fener yağı şişesi veriyor.' },
+  'Kuzgun Teodor': { item: 'kuzgun_tuyu', text: 'Teodor sana parlak bir kuzgun tüyü bırakıyor.' },
+  'Çıt': { item: 'bronz_dugme', text: 'Çıt sana küçük bir bronz düğme uzatıyor.' },
+  'Bay Orvel': { item: 'mektup', text: 'Orvel sana mühürlü küçük bir mektup veriyor.' },
+};
+
+export const TRUST_MAX = 5;
+export const TRUST_GIFT_AT = 3;
