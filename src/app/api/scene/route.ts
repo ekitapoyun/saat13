@@ -68,13 +68,14 @@ function parseScene(raw: string): StoredScene | null {
   }
 }
 
-async function generate(ch: any, location: string, node: (typeof NODES)[number]): Promise<{ scene: StoredScene; ok: boolean }> {
+async function generate(ch: any, location: string, node: (typeof NODES)[number], steps: number): Promise<{ scene: StoredScene; ok: boolean }> {
   const { data: memory } = await admin.from('world_memory').select('name,description,voice').limit(40);
   const state = {
     oyuncu: { ad: ch.name, yetenek: ch.skill, korku: ch.fear, fener: ch.lantern, esyalar: ch.items, bayraklar: Object.keys(ch.flags) },
     mekan: location,
     izinli_mekanlar: LOCATION_CODES,
     hedef_donum_noktasi: { no: node.n, baslik: node.title, mekan: node.location, hedef: node.goal, bitis_bayragi: node.flag },
+    bu_donum_noktasinda_kacinci_sahne: steps,
     son_sahne: ch.current?.text?.slice(0, 600) ?? null,
     bilinen_npcler: memory ?? [],
   };
@@ -84,7 +85,7 @@ async function generate(ch: any, location: string, node: (typeof NODES)[number])
     system: `${BIBLE}\n${RULES}`,
     messages: [{
       role: 'user',
-      content: `Oyuncunun durumu:\n${JSON.stringify(state)}\n\nBir sonraki sahneyi yaz. Oyuncuyu hedef dönüm noktasına yaklaştır ama acele ettirme.\nYalnızca tek bir JSON nesnesi döndür, öncesine ve sonrasına hiçbir şey yazma. Metin içindeki konuşmalarda düz çift tırnak yerine “ ” kullan. Paragraflar arasına \\n\\n koy. "fear" değeri -1, 0 ya da 1 sayısı olmalı.`,
+      content: `Oyuncunun durumu:\n${JSON.stringify(state)}\n\nBir sonraki sahneyi yaz. Anlatım ikinci tekil şahıs ve şimdiki zaman olsun (“kapıyı itiyorsun”, “Nene Selvi sana bakıyor”). Kısa, sade, doğal ve akıcı Türkçe kullan. Sahnede en fazla bir benzetme olsun. Hikâyeyi her sahnede gözle görülür biçimde ilerlet: yeni bir bilgi, yeni bir kişi ya da yeni bir yer olsun. Oyuncu bu dönüm noktasında ${steps}. sahnede. 3. sahneden itibaren bitiş bayrağını seçeneklerden en az birine MUTLAKA ver ve hikâyeyi hedefe ulaştır.\nYalnızca tek bir JSON nesnesi döndür, öncesine ve sonrasına hiçbir şey yazma. Metin içindeki konuşmalarda düz çift tırnak yerine “ ” kullan. Paragraflar arasına \\n\\n koy. "fear" değeri -1, 0 ya da 1 sayısı olmalı.`,
     }],
   });
   const block = msg.content.find((b) => b.type === 'text');
@@ -130,6 +131,11 @@ export async function POST(req: NextRequest) {
     if (fear >= 4) { location = 'yurt'; fear = 0; lantern = Math.min(14, lantern + 4); }
   }
 
+  // Oyuncunun bu dönüm noktasında kaçıncı sahnede olduğu (AI'ı ilerlemeye zorlamak için).
+  const prevSteps: number = ch.current?.steps ?? 0;
+  const prevNode: number | undefined = ch.current?.nodeAt;
+  const steps = choiceId && prevNode === node ? prevSteps + 1 : 1;
+
   let scene: StoredScene;
   if (node > NODES.length) {
     scene = finishedScene;
@@ -149,7 +155,7 @@ export async function POST(req: NextRequest) {
     if (cached) {
       scene = cached.body as StoredScene;
     } else {
-      const made = await generate({ ...ch, location, fear, lantern, items, flags }, location, target);
+      const made = await generate({ ...ch, location, fear, lantern, items, flags }, location, target, steps);
       scene = made.scene;
       // Yedek sahne asla önbelleğe alınmaz: sonraki istek yeniden denesin.
       if (made.ok) {
@@ -160,7 +166,7 @@ export async function POST(req: NextRequest) {
 
   const { data: updated } = await admin
     .from('characters')
-    .update({ location, node, fear, lantern, items, flags, current: scene })
+    .update({ location, node, fear, lantern, items, flags, current: { ...scene, steps, nodeAt: node } })
     .eq('id', ch.id)
     .select()
     .single();
