@@ -29,10 +29,40 @@ const fallbackScene = (location: string): StoredScene => ({
   ],
 });
 
+const REST_CHOICE: StoredChoice = { id: 'rest', label: 'Uyu ve yeni geceye uyan', to: 'yurt' };
+
+// Yedek metin: yalnızca AI başarısız olursa kullanılır.
 const nightOverScene: StoredScene = {
-  text: 'Fenerin alevi küçülüp küçülüp sönüyor. Tam karanlık basmadan, kapının önünde Nene Selvi beliriyor, elinde başka bir fener ve sıcak bir battaniye. "Yeter bu gece, hadi eve." Yurdun sıcaklığı sana tüm yorgunluğu unutturuyor. Bulduğun ipuçları cebinde. Yarın yeni bir gece.',
-  choices: [{ id: 'rest', label: 'Dinlen ve yeni bir gece başlat', to: 'yurt' }],
+  text: 'Fenerin alevi küçülüyor, titriyor ve sönüyor. Karanlık basmadan sokağın ucunda bir ışık beliriyor: Nene Selvi, elinde yedek bir fener ve kalın bir battaniye. “Bu gece yeter,” diyor. “Gelgit seni beklemez ama ben beklerim. Hadi eve.”\n\nYurda dönerken aklında hâlâ cevapsız sorular dönüyor. Battaniyenin altında gözlerin ağırlaşıyor. Bir şeyi unutmuş gibisin ama ne olduğunu çıkaramıyorsun.',
+  choices: [REST_CHOICE],
 };
+
+// Fener söndüğünde son olayı bağlayan, merak bırakan kısa bir gece sonu sahnesi yazdırır.
+async function nightScene(ch: any, chosen?: string): Promise<StoredScene> {
+  try {
+    const msg = await ai.messages.create({
+      model: MODEL,
+      max_tokens: 1200,
+      system: `${BIBLE}\n${RULES}`,
+      messages: [{
+        role: 'user',
+        content: `Oyuncunun fener yağı bitti, fener sönüyor.\nSon sahne: ${String(ch.current?.text ?? '').slice(-900)}\nSon seçim: ${chosen ?? '-'}\nBulunan ipuçları: ${Object.keys(ch.flags).join(', ') || 'yok'}\n\nKısa bir gece sonu sahnesi yaz (80-120 kelime, ikinci tekil şahıs, şimdiki zaman, sade Türkçe). Fenerin alevi küçülüp sönerken son sahnedeki olaya bir iki cümleyle değin, sonra oyuncu güvenle yurda dönsün (Nene Selvi yolda karşılasın ya da kapıda beklesin), battaniyenin altında uykuya dalsın. Çözülmemiş bir gizemle ya da tuhaf bir ayrıntıyla bitir. Seçenek yazma. Yalnızca {"text":"..."} biçiminde tek bir JSON nesnesi döndür. Konuşmalarda “ ” kullan, paragrafları \\n\\n ile ayır.`,
+      }],
+    });
+    const block = msg.content.find((b) => b.type === 'text');
+    if (block && block.type === 'text') {
+      const s = block.text.indexOf('{');
+      const e = block.text.lastIndexOf('}');
+      const j = JSON.parse(block.text.slice(s, e + 1));
+      if (typeof j.text === 'string' && j.text.length > 60 && j.text.length < 1800) {
+        return { text: j.text, choices: [REST_CHOICE] };
+      }
+    }
+  } catch (err) {
+    console.error('Gece sonu sahnesi yazılamadı:', err instanceof Error ? err.message : err);
+  }
+  return nightOverScene;
+}
 
 const finishedScene: StoredScene = {
   text: 'Bu bölümün sonuna geldin. Sis inceldi, kasaba ilk kez nefes alıyor. Yeni bir macera için yakında yine buluşacağız.',
@@ -76,6 +106,7 @@ async function generate(ch: any, location: string, node: (typeof NODES)[number],
     izinli_mekanlar: LOCATION_CODES,
     hedef_donum_noktasi: { no: node.n, baslik: node.title, mekan: node.location, hedef: node.goal, bitis_bayragi: node.flag },
     bu_donum_noktasinda_kacinci_sahne: steps,
+    yeni_gece_basladi: Boolean(ch.current?.night),
     son_sahne: ch.current?.text?.slice(-1200) ?? null,
     oyuncunun_son_secimi: chosen ?? null,
     henuz_sahneye_girmeyecek_karakterler: Object.entries(FIRST_APPEARS)
@@ -89,7 +120,7 @@ async function generate(ch: any, location: string, node: (typeof NODES)[number],
     system: `${BIBLE}\n${RULES}`,
     messages: [{
       role: 'user',
-      content: `Oyuncunun durumu:\n${JSON.stringify(state)}\n\nBir sonraki sahneyi yaz. Önce oyuncunun son seçimine DOĞRUDAN karşılık ver: seçtiği eylem sahnede gerçekleşsin, sorduğu soru cevaplansın, konuştuğu kişi cevap versin. "henuz_sahneye_girmeyecek_karakterler" listesindeki karakterleri sahneye sokma, yalnızca belirsiz bir iz (uzaktan ses, gölge) göstermen yeterli. Anlatım ikinci tekil şahıs ve şimdiki zaman olsun (“kapıyı itiyorsun”, “Nene Selvi sana bakıyor”). Kısa, sade, doğal ve akıcı Türkçe kullan. Sahnede en fazla bir benzetme olsun. Hikâyeyi her sahnede gözle görülür biçimde ilerlet: yeni bir bilgi, yeni bir kişi ya da yeni bir yer olsun. Oyuncu bu dönüm noktasında ${steps}. sahnede. 3. sahneden itibaren bitiş bayrağını seçeneklerden en az birine MUTLAKA ver ve hikâyeyi hedefe ulaştır.\nGerilim ve gizem ekle: sahneyi açık kalan bir soru ya da küçük bir ürperti (tuhaf ses, kıpırdayan gölge, kaybolan eşya) ile bitir. Seçenekler gerçek ikilem olsun (biri merak, biri temkin; her birinin bedeli ve getirisi olsun, hiçbiri bariz olmasın). Ürpertici bir şeye yaklaşan ya da dokunan seçeneğe "fear": 1 ver, rahatlatan seçeneğe (dost bir yüz, ışık, espri) -1. Seçeneklerin en az birine "fear": 1 ver. Dehşet, kan ve gerçek tehlike olmasın, ürperti hep güvenli ve biraz komik kalsın.\nYalnızca tek bir JSON nesnesi döndür, öncesine ve sonrasına hiçbir şey yazma. Metin içindeki konuşmalarda düz çift tırnak yerine “ ” kullan. Paragraflar arasına \\n\\n koy. "fear" değeri -1, 0 ya da 1 sayısı olmalı.`,
+      content: `Oyuncunun durumu:\n${JSON.stringify(state)}\n\nBir sonraki sahneyi yaz. Eğer "yeni_gece_basladi" doğruysa oyuncu uyuyup yeni geceye uyandı: sahneyi kısa bir uyanışla aç (Nene Selvi feneri yağla dolduruyor, sıcak bir ayrıntı), sonra daha önce bulunan ipuçlarını hatırlayarak hikâyeyi kaldığı yerden sürdür. Aksi durumda önce oyuncunun son seçimine DOĞRUDAN karşılık ver: seçtiği eylem sahnede gerçekleşsin, sorduğu soru cevaplansın, konuştuğu kişi cevap versin. "henuz_sahneye_girmeyecek_karakterler" listesindeki karakterleri sahneye sokma, yalnızca belirsiz bir iz (uzaktan ses, gölge) göstermen yeterli. Anlatım ikinci tekil şahıs ve şimdiki zaman olsun (“kapıyı itiyorsun”, “Nene Selvi sana bakıyor”). Kısa, sade, doğal ve akıcı Türkçe kullan. Sahnede en fazla bir benzetme olsun. Hikâyeyi her sahnede gözle görülür biçimde ilerlet: yeni bir bilgi, yeni bir kişi ya da yeni bir yer olsun. Oyuncu bu dönüm noktasında ${steps}. sahnede. 3. sahneden itibaren bitiş bayrağını seçeneklerden en az birine MUTLAKA ver ve hikâyeyi hedefe ulaştır.\nGerilim ve gizem ekle: sahneyi açık kalan bir soru ya da küçük bir ürperti (tuhaf ses, kıpırdayan gölge, kaybolan eşya) ile bitir. Seçenekler gerçek ikilem olsun (biri merak, biri temkin; her birinin bedeli ve getirisi olsun, hiçbiri bariz olmasın). Ürpertici bir şeye yaklaşan ya da dokunan seçeneğe "fear": 1 ver, rahatlatan seçeneğe (dost bir yüz, ışık, espri) -1. Seçeneklerin en az birine "fear": 1 ver. Dehşet, kan ve gerçek tehlike olmasın, ürperti hep güvenli ve biraz komik kalsın.\nYalnızca tek bir JSON nesnesi döndür, öncesine ve sonrasına hiçbir şey yazma. Metin içindeki konuşmalarda düz çift tırnak yerine “ ” kullan. Paragraflar arasına \\n\\n koy. "fear" değeri -1, 0 ya da 1 sayısı olmalı.`,
     }],
   });
   const block = msg.content.find((b) => b.type === 'text');
@@ -125,7 +156,7 @@ export async function POST(req: NextRequest) {
     if (!picked) return NextResponse.json({ error: 'Geçersiz seçim' }, { status: 400 });
     chosenLabel = picked.label;
 
-    lantern = Math.max(0, lantern - 1);
+    if (picked.id !== 'rest') lantern = Math.max(0, lantern - 1);
     fear = Math.min(4, Math.max(0, fear + (picked.fear ?? 0)));
     if (picked.give && !items.includes(picked.give) && items.length < 8) items.push(picked.give);
     if (picked.flag) flags[picked.flag] = true;
@@ -147,10 +178,12 @@ export async function POST(req: NextRequest) {
   const steps = choiceId && prevNode === node ? prevSteps + 1 : 1;
 
   let scene: StoredScene;
+  let isNight = false;
   if (node > NODES.length) {
     scene = finishedScene;
   } else if (lantern <= 0) {
-    scene = nightOverScene;
+    scene = await nightScene(ch, chosenLabel);
+    isNight = true;
     location = 'yurt';
     lantern = 14;
   } else {
@@ -176,7 +209,7 @@ export async function POST(req: NextRequest) {
 
   const { data: updated } = await admin
     .from('characters')
-    .update({ location, node, fear, lantern, items, flags, current: { ...scene, steps, nodeAt: node } })
+    .update({ location, node, fear, lantern, items, flags, current: { ...scene, steps, nodeAt: node, night: isNight } })
     .eq('id', ch.id)
     .select()
     .single();
