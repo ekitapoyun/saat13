@@ -21,6 +21,17 @@ const QUICK: Record<string, string> = {
 
 type Here = { id: string; name: string };
 type Quick = { from: string; text: string; at: number };
+type Invite = { inviteId: string; fromId: string; fromName: string };
+type JView = {
+  id: string;
+  status: 'open' | 'closed';
+  round: number;
+  rounds: number;
+  scene: { text: string; choices: { id: string; label: string }[] } | null;
+  members: string[];
+  myVote: string | null;
+  waiting: string[];
+};
 
 export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
@@ -70,11 +81,26 @@ export default function Home() {
 
   if (!ready) return <main><p className="small">Yükleniyor…</p></main>;
   if (!session) return <Login />;
-  if (!character) return <CreateCharacter userId={session.user.id} onDone={() => call()} />;
+  if (!character) {
+    return (
+      <>
+        {error && <main><p role="alert">Sahne yüklenemedi: {error}</p></main>}
+        <CreateCharacter userId={session.user.id} onDone={() => call()} />
+      </>
+    );
+  }
 
   return (
     <main>
-      <Game character={character} scene={scene} busy={busy} error={error} onChoose={call} />
+      <Game
+        character={character}
+        scene={scene}
+        busy={busy}
+        error={error}
+        token={session.access_token}
+        onChoose={call}
+        onRefresh={() => call()}
+      />
       <p className="small" style={{ marginTop: 24 }}>
         <button style={{ padding: '4px 10px' }} onClick={() => supabase.auth.signOut()}>Çıkış yap</button>
       </p>
@@ -124,13 +150,19 @@ function CreateCharacter({ userId, onDone }: { userId: string; onDone: () => voi
   const [name, setName] = useState('');
   const [skill, setSkill] = useState<Skill>('gozlemci');
   const [err, setErr] = useState('');
+  const [working, setWorking] = useState(false);
 
   async function create() {
     setErr('');
-    // Gerçek ad kullanma uyarısı: takma ad.
+    setWorking(true);
+    // Takma ad kullanılır, gerçek ad değil.
     const { error } = await supabase.from('characters').insert({ user_id: userId, name: name.trim(), skill });
-    if (error) setErr('Karakter oluşturulamadı. Ad 2-16 harf olmalı.');
-    else onDone();
+    if (error) {
+      setErr('Karakter oluşturulamadı: ' + error.message);
+      setWorking(false);
+    } else {
+      onDone(); // sahne yazılırken düğme kilitli kalır
+    }
   }
 
   return (
@@ -144,7 +176,9 @@ function CreateCharacter({ userId, onDone }: { userId: string; onDone: () => voi
           {SKILLS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
         <div className="choices">
-          <button onClick={create} disabled={name.trim().length < 2}>Yolculuğa başla</button>
+          <button onClick={create} disabled={working || name.trim().length < 2}>
+            {working ? 'Hikâye yazılıyor…' : 'Yolculuğa başla'}
+          </button>
         </div>
         {err && <p role="alert">{err}</p>}
       </div>
@@ -152,13 +186,33 @@ function CreateCharacter({ userId, onDone }: { userId: string; onDone: () => voi
   );
 }
 
+async function jointApi(token: string, payload: object) {
+  const res = await fetch('/api/joint', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  const j = await res.json();
+  if (!res.ok) throw new Error(j.error || 'Bir şeyler ters gitti');
+  return j;
+}
+
 function Game(props: {
-  character: Character; scene: Scene | null; busy: boolean; error: string; onChoose: (id: string) => void;
+  character: Character; scene: Scene | null; busy: boolean; error: string; token: string;
+  onChoose: (id: string) => void; onRefresh: () => void;
 }) {
-  const { character, scene, busy, error, onChoose } = props;
+  const { character, scene, busy, error, token, onChoose, onRefresh } = props;
   const [here, setHere] = useState<Here[]>([]);
   const [messages, setMessages] = useState<Quick[]>([]);
+  const [invite, setInvite] = useState<Invite | null>(null);
+  const [notice, setNotice] = useState('');
+  const [jointId, setJointId] = useState<string | null>(null);
   const channel = useRef<RealtimeChannel | null>(null);
+
+  // Sayfa yenilense bile açık ortak sahne varsa ona geri dön.
+  useEffect(() => {
+    jointApi(token, { action: 'mine' }).then((j) => { if (j.session) setJointId(j.session.id); }).catch(() => {});
+  }, [token]);
 
   // Aynı mekândaki oyuncuları görmek için mekân başına bir presence kanalı.
   useEffect(() => {
@@ -174,6 +228,14 @@ function Game(props: {
       if (payload.from === character.name) return;
       setMessages((m) => [...m.slice(-4), { from: payload.from, text: QUICK[payload.preset] ?? '', at: Date.now() }]);
     });
+    ch.on('broadcast', { event: 'invite' }, ({ payload }) => {
+      if (payload.to === character.id) {
+        setInvite({ inviteId: payload.inviteId, fromId: payload.fromId, fromName: payload.fromName });
+      }
+    });
+    ch.on('broadcast', { event: 'joint_started' }, ({ payload }) => {
+      if (payload.to === character.id) { setNotice(''); setJointId(payload.sessionId); }
+    });
     ch.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') await ch.track({ name: character.name });
     });
@@ -184,6 +246,33 @@ function Game(props: {
   function send(preset: string) {
     channel.current?.send({ type: 'broadcast', event: 'quick', payload: { from: character.name, preset } });
     setMessages((m) => [...m.slice(-4), { from: 'Sen', text: QUICK[preset], at: Date.now() }]);
+  }
+
+  async function inviteTo(h: Here) {
+    setNotice('');
+    try {
+      const j = await jointApi(token, { action: 'invite', toCharacterId: h.id });
+      channel.current?.send({
+        type: 'broadcast', event: 'invite',
+        payload: { to: h.id, fromId: character.id, fromName: character.name, inviteId: j.inviteId },
+      });
+      setNotice(`${h.name} adlı oyuncuya davet gönderildi. Kabul edince ortak sahne açılacak.`);
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'Davet gönderilemedi');
+    }
+  }
+
+  async function acceptInvite() {
+    if (!invite) return;
+    try {
+      const j = await jointApi(token, { action: 'accept', inviteId: invite.inviteId });
+      channel.current?.send({ type: 'broadcast', event: 'joint_started', payload: { to: invite.fromId, sessionId: j.sessionId } });
+      setInvite(null);
+      setJointId(j.sessionId);
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'Davet kabul edilemedi');
+      setInvite(null);
+    }
   }
 
   return (
@@ -201,30 +290,152 @@ function Game(props: {
         <div>{character.items.length ? `Çanta: ${character.items.join(', ')}` : 'Çanta boş'}</div>
       </div>
 
-      <div className="panel scene" aria-live="polite">
-        {scene ? scene.text.split('\n\n').map((p, i) => <p key={i}>{p}</p>) : <p>Sahne yükleniyor…</p>}
+      {jointId ? (
+        <JointView
+          token={token}
+          sessionId={jointId}
+          onExit={() => { setJointId(null); onRefresh(); }}
+        />
+      ) : (
+        <div className="panel scene" aria-live="polite">
+          {scene ? scene.text.split('\n\n').map((p, i) => <p key={i}>{p}</p>) : <p>Sahne yükleniyor…</p>}
+          <div className="choices">
+            {scene?.choices.map((c) => (
+              <button key={c.id} disabled={busy} onClick={() => onChoose(c.id)}>{c.label}</button>
+            ))}
+          </div>
+          {busy && <p className="small">Hikâye yazılıyor…</p>}
+          {error && <p role="alert">{error}</p>}
+
+          {invite && (
+            <div className="here">
+              <b>{invite.fromName}</b> seninle hikâyeni birleştirmek istiyor.
+              <div className="row">
+                <button onClick={acceptInvite}>Kabul et</button>
+                <button onClick={() => setInvite(null)}>Şimdi değil</button>
+              </div>
+            </div>
+          )}
+
+          {here.length > 0 && (
+            <div className="here">
+              <b>{here.map((h) => h.name).join(', ')}</b> da burada.
+              <div className="row">
+                {Object.entries(QUICK).map(([k, v]) => <button key={k} onClick={() => send(k)}>{v}</button>)}
+              </div>
+              <div className="row">
+                {here.map((h) => (
+                  <button key={h.id} onClick={() => inviteTo(h)}>🧩 {h.name} ile hikâyeni birleştir</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {notice && <p className="small" role="status">{notice}</p>}
+          {messages.length > 0 && (
+            <div className="small" style={{ marginTop: 10 }}>
+              {messages.map((m) => <div key={m.at}>{m.from}: {m.text}</div>)}
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+// Ortak sahne: iki oyuncu aynı sahneyi görür, birlikte oy verir.
+function JointView({ token, sessionId, onExit }: { token: string; sessionId: string; onExit: () => void }) {
+  const [view, setView] = useState<JView | null>(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    async function tick() {
+      try {
+        const j = await jointApi(token, { action: 'state', sessionId });
+        if (alive) { setView(j.session); setErr(''); }
+      } catch (e) {
+        if (alive) setErr(e instanceof Error ? e.message : 'Bağlantı hatası');
+      }
+    }
+    tick();
+    const t = setInterval(tick, 3000); // arkadaşının oyunu ve yeni sahne için
+    return () => { alive = false; clearInterval(t); };
+  }, [token, sessionId]);
+
+  async function vote(choiceId: string) {
+    setBusy(true);
+    try {
+      const j = await jointApi(token, { action: 'vote', sessionId, choiceId });
+      setView(j.session);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Oy verilemedi');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function leave() {
+    try { await jointApi(token, { action: 'leave', sessionId }); } catch { /* sessizce çık */ }
+    onExit();
+  }
+
+  const finished = view?.status === 'closed';
+
+  return (
+    <div className="panel scene" aria-live="polite">
+      <p className="small">
+        Ortak sahne{view ? `: ${view.members.join(' ve ')}` : ''}
+        {view && !finished ? ` · Tur ${view.round}/${view.rounds}` : ''}
+      </p>
+
+      {!view || !view.scene ? (
+        <p>Hikâye yazılıyor…</p>
+      ) : (
+        view.scene.text.split('\n\n').map((p, i) => <p key={i}>{p}</p>)
+      )}
+
+      {view?.scene && !finished && (
         <div className="choices">
-          {scene?.choices.map((c) => (
-            <button key={c.id} disabled={busy} onClick={() => onChoose(c.id)}>{c.label}</button>
+          {view.scene.choices.map((c) => (
+            <button
+              key={c.id}
+              disabled={busy || view.myVote !== null}
+              onClick={() => vote(c.id)}
+              style={view.myVote === c.id ? { borderColor: 'var(--brass)' } : undefined}
+            >
+              {view.myVote === c.id ? '✓ ' : ''}{c.label}
+            </button>
           ))}
         </div>
-        {busy && <p className="small">Hikâye yazılıyor…</p>}
-        {error && <p role="alert">{error}</p>}
+      )}
 
-        {here.length > 0 && (
-          <div className="here">
-            <b>{here.map((h) => h.name).join(', ')}</b> da burada.
-            <div className="row">
-              {Object.entries(QUICK).map(([k, v]) => <button key={k} onClick={() => send(k)}>{v}</button>)}
-            </div>
-          </div>
-        )}
-        {messages.length > 0 && (
-          <div className="small" style={{ marginTop: 10 }}>
-            {messages.map((m) => <div key={m.at}>{m.from}: {m.text}</div>)}
-          </div>
-        )}
-      </div>
-    </>
+      {view?.scene && !finished && view.myVote !== null && (
+        <p className="small">
+          Seçimin alındı. {view.waiting.length ? `Bekleniyor: ${view.waiting.join(', ')}` : 'Hikâye yazılıyor…'}
+        </p>
+      )}
+      {view?.scene && !finished && view.myVote === null && view.waiting.length > 1 && (
+        <p className="small">İkiniz de seçim yapınca hikâye devam eder. Oylar eşit olursa sırayla biriniz karar verir.</p>
+      )}
+
+      {finished && view?.scene && (
+        <>
+          <p className="small">
+            {view.scene.choices.length === 0
+              ? 'Ortak görev tamamlandı. İkiniz de biraz soluklandınız: fener yağı doldu, korku azaldı.'
+              : 'Ortak sahne sona erdi: biriniz ayrıldı. Kendi hikâyene dönebilirsin.'}
+          </p>
+          <div className="choices"><button onClick={onExit}>Kendi hikâyene dön</button></div>
+        </>
+      )}
+
+      {err && <p role="alert">{err}</p>}
+      {!finished && (
+        <p className="small" style={{ marginTop: 14 }}>
+          <button style={{ padding: '4px 10px' }} onClick={leave}>Ortak sahneden ayrıl</button>
+        </p>
+      )}
+    </div>
   );
 }
