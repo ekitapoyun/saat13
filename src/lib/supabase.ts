@@ -23,6 +23,7 @@ export type Character = {
   chapter: number;
   chapterTitle: string;
   friends: { name: string; value: number }[];
+  cit: { available: boolean; away: boolean; movesLeft: number; rested: boolean; canSend: boolean; trust: number };
   map: {
     unlocked: string[];
     travel: string[];
