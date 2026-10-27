@@ -240,12 +240,21 @@ async function generateInner(
   return { scene: parsed.scene, ok: true, npc: parsed.npc };
 }
 
-// AI hata verir ya da zaman aşımına uğrarsa oyuncu hata görmesin: yedek sahne gösterilir (önbelleğe alınmaz).
+// Yapay zekâ servisine ulaşılamazsa (kredi bitti, zaman aşımı, yoğunluk) oyuncunun hamlesi harcanmasın:
+// sunucu hata döner, durum kaydedilmez, oyuncu aynı seçeneği tekrar deneyebilir.
+class AiUnavailable extends Error {}
+
+// Model bozuk JSON üretirse bir kez daha dener; yine olmazsa yedek sahne gösterilir (önbelleğe alınmaz).
 async function generate(...args: Parameters<typeof generateInner>): ReturnType<typeof generateInner> {
   try {
-    return await generateInner(...args);
+    let made = await generateInner(...args);
+    if (!made.ok) made = await generateInner(...args);
+    return made;
   } catch (e) {
     console.error('generate failed', e);
+    if (e instanceof Anthropic.APIError || e instanceof Anthropic.APIConnectionError) {
+      throw new AiUnavailable(e instanceof Anthropic.APIError ? `${e.status}` : 'baglanti');
+    }
     return { scene: fallbackScene(), ok: false, npc: null };
   }
 }
@@ -557,7 +566,18 @@ export async function POST(req: NextRequest) {
     if (cached) {
       scene = cached.body as StoredScene;
     } else {
-      const made = await generate(sceneCh, location, target, steps, chosenLabel, isNew);
+      let made: Awaited<ReturnType<typeof generate>>;
+      try {
+        made = await generate(sceneCh, location, target, steps, chosenLabel, isNew);
+      } catch (e) {
+        if (e instanceof AiUnavailable) {
+          return NextResponse.json(
+            { error: 'Hikâye yazıcısı şu an dinleniyor, hamlen harcanmadı. Birkaç dakika sonra aynı seçeneğe tekrar dokun.' },
+            { status: 503 }
+          );
+        }
+        throw e;
+      }
       scene = made.scene;
       newNpc = made.npc;
       // Yedek sahne asla önbelleğe alınmaz: sonraki istek yeniden denesin.
