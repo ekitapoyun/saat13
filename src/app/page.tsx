@@ -64,7 +64,10 @@ export default function Home() {
         headers: { 'content-type': 'application/json', authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify(payload),
       });
-      const j = await res.json();
+      // Sunucu zaman aşımına uğrarsa JSON yerine düz metin dönebilir; anlaşılır bir mesaj göster.
+      const raw = await res.text();
+      let j: any;
+      try { j = JSON.parse(raw); } catch { throw new Error('Hikâye şimdi yazılamadı, sunucu geç yanıt verdi. Birkaç saniye sonra aynı seçeneğe tekrar dokun.'); }
       if (!res.ok) throw new Error(j.error || 'Bir şeyler ters gitti');
       setScene(j.scene);
       setCharacter(j.character);
