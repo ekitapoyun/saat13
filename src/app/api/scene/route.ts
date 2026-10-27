@@ -16,7 +16,10 @@ const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
-const ai = new Anthropic();
+// Sahne yazdırmak birkaç saniye sürebilir: Vercel varsayılan süresi (10 sn) yetmeyebilir.
+export const maxDuration = 60;
+
+const ai = new Anthropic({ timeout: 45_000, maxRetries: 1 });
 const MODEL = process.env.SCENE_MODEL || 'claude-sonnet-5-5';
 const MAX_CHAPTER = Math.max(...Object.keys(CHAPTERS).map(Number));
 const MAX_ITEMS = 8;
@@ -193,7 +196,7 @@ async function saveNpc(npc: NewNpc, characterId: string, chapter: number) {
   if (error) console.error('NPC kaydedilemedi:', error.message);
 }
 
-async function generate(
+async function generateInner(
   ch: any, location: string, node: Node, steps: number, chosen: string | undefined, isNew: boolean
 ): Promise<{ scene: StoredScene; ok: boolean; npc: NewNpc | null }> {
   const chapter: number = ch.chapter ?? 1;
@@ -235,6 +238,16 @@ async function generate(
   const parsed = block && block.type === 'text' ? parseScene(block.text, allowed) : null;
   if (!parsed) return { scene: fallbackScene(), ok: false, npc: null };
   return { scene: parsed.scene, ok: true, npc: parsed.npc };
+}
+
+// AI hata verir ya da zaman aşımına uğrarsa oyuncu hata görmesin: yedek sahne gösterilir (önbelleğe alınmaz).
+async function generate(...args: Parameters<typeof generateInner>): ReturnType<typeof generateInner> {
+  try {
+    return await generateInner(...args);
+  } catch (e) {
+    console.error('generate failed', e);
+    return { scene: fallbackScene(), ok: false, npc: null };
+  }
 }
 
 // Yetenek seçeneği: yalnızca düğüm mekânında, düğüm başına bir kez (yağ şişesi yapmak gece başına bir kez).
