@@ -163,6 +163,7 @@ async function generate(
   ch: any, location: string, node: Node, steps: number, chosen: string | undefined, isNew: boolean
 ): Promise<{ scene: StoredScene; ok: boolean; npc: NewNpc | null }> {
   const chapter: number = ch.chapter ?? 1;
+  const chapterNodes = nodesOf(chapter);
   const { data: memory } = await admin
     .from('world_memory').select('name,description,voice').order('created_at', { ascending: false }).limit(40);
   const allowed = new Set<string>([...KNOWN_NPCS, ...(memory ?? []).map((m: any) => m.name)]);
@@ -170,6 +171,9 @@ async function generate(
     bolum: { no: chapter, baslik: CHAPTERS[chapter]?.title, ozet: CHAPTERS[chapter]?.intro || undefined, yeni_bolum_basladi: isNew },
     oyuncu: { ad: ch.name, yetenek: ch.skill, korku: ch.fear, fener: ch.lantern, esyalar: ch.items, bayraklar: Object.keys(ch.flags) },
     guven_puanlari: ch.trust ?? {},
+    tamamlanan_duraklar: chapterNodes.slice(0, Math.max(0, node.n - 1)).map((n, i, all) =>
+      i >= all.length - 3 ? { no: n.n, baslik: n.title, ne_oldu: n.goal } : { no: n.n, baslik: n.title }),
+    atlanan_durak: ch.skipped ? { baslik: ch.skipped.title, hedef: ch.skipped.goal } : null,
     mekan: location,
     izinli_mekanlar: LOCATION_CODES,
     hedef_donum_noktasi: { no: node.n, baslik: node.title, mekan: node.location, hedef: node.goal, bitis_bayragi: node.flag },
@@ -190,7 +194,7 @@ async function generate(
     system: `${BIBLE}\n${RULES}`,
     messages: [{
       role: 'user',
-      content: `Oyuncunun durumu:\n${JSON.stringify(state)}\n\nBir sonraki sahneyi yaz. Eğer "yeni_bolum_basladi" doğruysa yeni bir bölümün ilk sahnesidir: "bolum.ozet" bilgisini oyuncuya anlatma, yalnızca o havayı taşıyan sıcak, merak uyandıran bir açılış yaz. Eğer "yeni_gece_basladi" doğruysa oyuncu uyuyup yeni geceye uyandı: sahneyi kısa bir uyanışla aç (Nene Selvi feneri yağla dolduruyor, sıcak bir ayrıntı), sonra daha önce bulunan ipuçlarını hatırlayarak hikâyeyi kaldığı yerden sürdür. Eğer "korkudan_yurda_dondu" doğruysa oyuncu çok ürkerek yurda koştu: sahneyi Nene Selvi'nin onu sakinleştirmesiyle aç (sıcak bir içecek, battaniye), sonra hikâyeyi kaldığı yerden sürdür. Aksi durumda önce oyuncunun son seçimine DOĞRUDAN karşılık ver: seçtiği eylem sahnede gerçekleşsin, sorduğu soru cevaplansın, konuştuğu kişi cevap versin. "henuz_sahneye_girmeyecek_karakterler" listesindeki karakterleri sahneye sokma, yalnızca belirsiz bir iz (uzaktan ses, gölge) göstermen yeterli. "guven_puanlari" yüksek olan karakterler oyuncuya daha sıcak ve yardımsever davransın, hiç puanı olmayanlar mesafeli ama kibar olsun. "bilinen_npcler" listesindeki karakterleri tutarlı kullan. Anlatım ikinci tekil şahıs ve şimdiki zaman olsun (“kapıyı itiyorsun”, “Nene Selvi sana bakıyor”). Kısa, sade, doğal ve akıcı Türkçe kullan. Sahnede en fazla bir benzetme olsun. Hikâyeyi her sahnede gözle görülür biçimde ilerlet: yeni bir bilgi, yeni bir kişi ya da yeni bir yer olsun. Oyuncu bu dönüm noktasında ${steps}. sahnede. 3. sahneden itibaren bitiş bayrağını seçeneklerden en az birine MUTLAKA ver ve hikâyeyi hedefe ulaştır.\nGerilim ve gizem ekle: sahneyi açık kalan bir soru ya da küçük bir ürperti (tuhaf ses, kıpırdayan gölge, kaybolan eşya) ile bitir. Seçenekler gerçek ikilem olsun (biri merak, biri temkin; her birinin bedeli ve getirisi olsun, hiçbiri bariz olmasın). Ürpertici bir şeye yaklaşan ya da dokunan seçeneğe "fear": 1 ver, rahatlatan seçeneğe (dost bir yüz, ışık, espri) -1. Seçeneklerin en az birine "fear": 1 ver. Dehşet, kan ve gerçek tehlike olmasın, ürperti hep güvenli ve biraz komik kalsın.\nBir karakterle konuşmayı, ona yardım etmeyi ya da dürüst davranmayı içeren seçeneğe "npc" (karakterin adı) ve "trust": 1 ekle; kaba ya da yalancı davranış için -1.\nYalnızca tek bir JSON nesnesi döndür, öncesine ve sonrasına hiçbir şey yazma. Metin içindeki konuşmalarda düz çift tırnak yerine “ ” kullan. Paragraflar arasına \\n\\n koy. "fear" değeri -1, 0 ya da 1 sayısı olmalı.`,
+      content: `Oyuncunun durumu:\n${JSON.stringify(state)}\n\nBir sonraki sahneyi yaz. Eğer "yeni_bolum_basladi" doğruysa yeni bir bölümün ilk sahnesidir: "bolum.ozet" bilgisini oyuncuya anlatma, yalnızca o havayı taşıyan sıcak, merak uyandıran bir açılış yaz. Eğer "yeni_gece_basladi" doğruysa oyuncu uyuyup yeni geceye uyandı: sahneyi kısa bir uyanışla aç (Nene Selvi feneri yağla dolduruyor, sıcak bir ayrıntı), sonra daha önce bulunan ipuçlarını hatırlayarak hikâyeyi kaldığı yerden sürdür. Eğer "korkudan_yurda_dondu" doğruysa oyuncu çok ürkerek yurda koştu: sahneyi Nene Selvi'nin onu sakinleştirmesiyle aç (sıcak bir içecek, battaniye), sonra hikâyeyi kaldığı yerden sürdür. "tamamlanan_duraklar" listesindeki olaylar çoktan yaşandı: onları yeniden yaşatma ve baştan anlatma, yalnızca gerekirse geçmişte kalmış bir ayrıntı olarak an. Eğer "atlanan_durak" doluysa o durağın olayı ekranda anlatılmadan çözülmüş sayılır: sahneyi o olayın nasıl çözüldüğünü bir ya da iki cümleyle özetleyerek aç, sonra yeni durağın hikâyesine geç. Aksi durumda önce oyuncunun son seçimine DOĞRUDAN karşılık ver: seçtiği eylem sahnede gerçekleşsin, sorduğu soru cevaplansın, konuştuğu kişi cevap versin. "henuz_sahneye_girmeyecek_karakterler" listesindeki karakterleri sahneye sokma, yalnızca belirsiz bir iz (uzaktan ses, gölge) göstermen yeterli. "guven_puanlari" yüksek olan karakterler oyuncuya daha sıcak ve yardımsever davransın, hiç puanı olmayanlar mesafeli ama kibar olsun. "bilinen_npcler" listesindeki karakterleri tutarlı kullan. Anlatım ikinci tekil şahıs ve şimdiki zaman olsun (“kapıyı itiyorsun”, “Nene Selvi sana bakıyor”). Kısa, sade, doğal ve akıcı Türkçe kullan. Sahnede en fazla bir benzetme olsun. Hikâyeyi her sahnede gözle görülür biçimde ilerlet: yeni bir bilgi, yeni bir kişi ya da yeni bir yer olsun. Oyuncu bu dönüm noktasında ${steps}. sahnede. 3. sahneden itibaren bitiş bayrağını seçeneklerden en az birine MUTLAKA ver ve hikâyeyi hedefe ulaştır.\nGerilim ve gizem ekle: sahneyi açık kalan bir soru ya da küçük bir ürperti (tuhaf ses, kıpırdayan gölge, kaybolan eşya) ile bitir. Seçenekler gerçek ikilem olsun (biri merak, biri temkin; her birinin bedeli ve getirisi olsun, hiçbiri bariz olmasın). Ürpertici bir şeye yaklaşan ya da dokunan seçeneğe "fear": 1 ver, rahatlatan seçeneğe (dost bir yüz, ışık, espri) -1. Seçeneklerin en az birine "fear": 1 ver. Dehşet, kan ve gerçek tehlike olmasın, ürperti hep güvenli ve biraz komik kalsın.\nBir karakterle konuşmayı, ona yardım etmeyi ya da dürüst davranmayı içeren seçeneğe "npc" (karakterin adı) ve "trust": 1 ekle; kaba ya da yalancı davranış için -1.\nYalnızca tek bir JSON nesnesi döndür, öncesine ve sonrasına hiçbir şey yazma. Metin içindeki konuşmalarda düz çift tırnak yerine “ ” kullan. Paragraflar arasına \\n\\n koy. "fear" değeri -1, 0 ya da 1 sayısı olmalı.`,
     }],
   });
   const block = msg.content.find((b) => b.type === 'text');
@@ -313,6 +317,7 @@ export async function POST(req: NextRequest) {
   let chosenLabel: string | undefined = picked?.label;
   let scared = false;
   let isNew = false;
+  let skipped: Node | null = null;
 
   if (picked && ['next', 'replay', 'restart'].includes(picked.id)) {
     // 4) Bölüm sonu seçenekleri: sonraki bölüm ya da yeniden oynama.
@@ -396,7 +401,7 @@ export async function POST(req: NextRequest) {
     if (lantern === 4 || lantern === 2) fear = Math.min(4, fear + 1);
     if (picked.to) location = picked.to;
     // Güvenlik ağı: oyuncu bir dönüm noktasında 5 sahneden fazla kalırsa hikâye kendiliğinden ilerler.
-    if (cur && !flags[cur.flag] && (ch.current?.steps ?? 0) >= 5) flags[cur.flag] = true;
+    if (cur && !flags[cur.flag] && (ch.current?.steps ?? 0) >= 8) { flags[cur.flag] = true; skipped = cur; }
     if (cur && flags[cur.flag]) node += 1;
 
     // Korku sınırı: ceza yok, yumuşak dönüş.
@@ -412,7 +417,7 @@ export async function POST(req: NextRequest) {
   let isNight = false;
   let finished = false;
   let newNpc: NewNpc | null = null;
-  const sceneCh = { ...ch, chapter, location, fear, lantern, items, flags, trust, scared, current: isNew ? null : ch.current };
+  const sceneCh = { ...ch, chapter, location, fear, lantern, items, flags, trust, scared, skipped, current: isNew ? null : ch.current };
 
   if (node > nodes.length) {
     finished = true;
@@ -436,7 +441,7 @@ export async function POST(req: NextRequest) {
     const prevText = isNew ? null : (ch.current?.baseText ?? ch.current?.text);
     const prevHash = prevText ? createHash('sha1').update(String(prevText)).digest('hex').slice(0, 10) : 'start';
     const action = travelTo ? `travel:${travelTo}` : isNew ? 'start' : (choiceId ?? 'start');
-    const cacheKey = `c${chapter}|${target.n}|${location}|${flagHash(flags)}|${prevHash}|${action}|${scared ? 's' : ''}|r${meta.replays ?? 0}`;
+    const cacheKey = `c${chapter}|${target.n}|${location}|${flagHash(flags)}|${prevHash}|${action}|${scared ? 's' : ''}${skipped ? 'k' : ''}|r${meta.replays ?? 0}`;
     const { data: cached } = await admin.from('scenes').select('body').eq('cache_key', cacheKey).maybeSingle();
     if (cached) {
       scene = cached.body as StoredScene;
