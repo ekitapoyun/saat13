@@ -63,7 +63,7 @@ export const NODES: Node[] = [
     talk: 'Çıt kolyeye bakıp heyecanla tıkırdıyor: “Eş. Aynı. Usta.” Sana bir adım daha yaklaşıyor.' },
   { n: 13, title: 'Mekanizma Odası', location: 'mekanizma', flag: 'mekanizma_acik', puzzle: 'disli',
     goal: 'Dişliyi takar. BULMACA: Dört dişli doğru sıraya dizilince mekanizma çalışır. Çözülünce müzik kutusu melodisini duyar.',
-    hint: 'Dişlilerin üstündeki oklar aynı yöne bakmıyor. Küçük dişliden büyüğe doğru sırayla çevir.',
+    hint: 'Dişlilerin üstünde birer işaret var ve hepsi odanın bir köşesini gösteriyor. Sırayı duvardaki ipuçları söylüyor.',
     talk: 'Müzik kutusu kendi kendine üç nota çalıyor ve susuyor. Melodiyi aklında tut.' },
   { n: 14, title: 'Üçüncü parça', location: 'mekanizma', flag: 'gecit_acik',
     goal: 'Üçüncü harita parçasını bulur, gizli geçit açılır.',
