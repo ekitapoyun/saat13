@@ -46,6 +46,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
+  if (action === 'history') {
+    const characterId = String(body.characterId ?? '');
+    if (!characterId) return fail('Geçersiz oyuncu');
+    const { data, error } = await admin.from('choice_log')
+      .select('id,chapter,node,location,kind,choice_label,scene_excerpt,fear_after,lantern_after,created_at')
+      .eq('character_id', characterId)
+      .order('created_at', { ascending: false })
+      .limit(80);
+    if (error) return fail('Seçim geçmişi okunamadı (choices.sql çalıştırıldı mı?): ' + error.message, 500);
+    return NextResponse.json({ history: data ?? [] });
+  }
+
   const [{ data: chars, error }, { data: memory }, emails] = await Promise.all([
     admin.from('characters').select('*').limit(500),
     admin.from('world_memory').select('id,name,description,voice,created_at,introduced_by').order('created_at', { ascending: false }).limit(100),
