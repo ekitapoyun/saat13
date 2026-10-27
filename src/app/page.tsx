@@ -573,17 +573,38 @@ function MapView({ character, busy, counts, onTravel }: { character: Character; 
 
   return (
     <div className="panel" style={{ marginBottom: 16 }}>
-      <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} width="100%" style={{ maxWidth: 440, display: 'block', margin: '0 auto' }} role="group" aria-label="Sisli Liman haritası">
+      <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} width="100%" style={{ maxWidth: 560, display: 'block', margin: '0 auto', borderRadius: 10 }} role="group" aria-label="Sisli Liman haritası">
+        <defs>
+          <clipPath id="mapclip"><rect x="0" y="0" width={MAP_W} height={MAP_H} rx="10" /></clipPath>
+          <radialGradient id="fog">
+            <stop offset="0%" stopColor="#eef1ee" stopOpacity="0.96" />
+            <stop offset="55%" stopColor="#eef1ee" stopOpacity="0.88" />
+            <stop offset="100%" stopColor="#eef1ee" stopOpacity="0" />
+          </radialGradient>
+        </defs>
         <rect x="0" y="0" width={MAP_W} height={MAP_H} rx="10" style={{ fill: 'var(--bg)' }} />
+        <image href="/harita.jpg" x="0" y="0" width={MAP_W} height={MAP_H} preserveAspectRatio="xMidYMid slice" clipPath="url(#mapclip)" />
+
+        {/* Yollar: yalnızca açılmış yerler arasında silik kesik çizgi */}
         {MAP_EDGES.map(([a, b]) => {
-          const ok = unlocked.has(a) && unlocked.has(b);
+          if (!(unlocked.has(a) && unlocked.has(b))) return null;
           const secret = SECRET_EDGES.includes(`${a}|${b}`);
           return (
-            <line key={`${a}-${b}`} x1={MAP_POS[a].x} y1={MAP_POS[a].y} x2={MAP_POS[b].x} y2={MAP_POS[b].y}
-              style={{ stroke: ok ? 'var(--mute)' : 'var(--line)' }} strokeWidth={ok ? 2.5 : 1.5}
-              strokeDasharray={secret || !ok ? '4 5' : undefined} />
+            <g key={`${a}-${b}`}>
+              <line x1={MAP_POS[a].x} y1={MAP_POS[a].y} x2={MAP_POS[b].x} y2={MAP_POS[b].y}
+                stroke="#0b1d21" strokeOpacity="0.35" strokeWidth="4" strokeLinecap="round" />
+              <line x1={MAP_POS[a].x} y1={MAP_POS[a].y} x2={MAP_POS[b].x} y2={MAP_POS[b].y}
+                stroke="#f3ecd8" strokeOpacity="0.75" strokeWidth="2" strokeLinecap="round"
+                strokeDasharray={secret ? '1 6' : '2 6'} />
+            </g>
           );
         })}
+
+        {/* Henüz açılmamış yerler sisle örtülür */}
+        {Object.entries(MAP_POS).map(([loc, p]) =>
+          unlocked.has(loc) ? null : <circle key={`fog-${loc}`} cx={p.x} cy={p.y} r="46" fill="url(#fog)" pointerEvents="none" />
+        )}
+
         {Object.entries(MAP_POS).map(([loc, p]) => {
           const open = unlocked.has(loc);
           const isHere = loc === here;
@@ -594,21 +615,31 @@ function MapView({ character, busy, counts, onTravel }: { character: Character; 
               onClick={() => setSel(loc)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setSel(loc); }}
               style={{ cursor: 'pointer', outline: 'none' }}>
-              <circle cx={p.x} cy={p.y} r="28" fill="transparent" />
-              <circle cx={p.x} cy={p.y} r="20"
-                style={{ fill: isHere ? 'var(--brass)' : open ? 'var(--panel)' : 'var(--bg)', stroke: go ? 'var(--brass)' : 'var(--line)' }}
-                strokeWidth={go || sel === loc ? 3.5 : 2} strokeDasharray={open ? undefined : '3 3'} />
-              <text x={p.x} y={p.y + 5} textAnchor="middle" fontSize="15" style={{ fill: isHere ? 'var(--bg)' : 'var(--ink)' }}>
+              <circle cx={p.x} cy={p.y} r="22" fill="transparent" />
+              {(go || isTarget) && (
+                <circle cx={p.x} cy={p.y} r="16" fill="none" stroke="#f0c75e" strokeOpacity="0.55" strokeWidth="3" />
+              )}
+              <circle cx={p.x} cy={p.y} r="11"
+                fill={isHere ? '#c9a24b' : open ? 'rgba(16,38,43,0.88)' : 'rgba(238,241,238,0.85)'}
+                stroke={sel === loc ? '#ffffff' : go ? '#f0c75e' : isHere ? '#10262b' : '#f3ecd8'}
+                strokeWidth={go || sel === loc ? 3 : 2}
+                strokeDasharray={open ? undefined : '3 3'} />
+              <text x={p.x} y={p.y + 4.5} textAnchor="middle" fontSize="12" fontWeight="700"
+                fill={isHere ? '#10262b' : open ? '#f3ecd8' : '#3a4a4d'}>
                 {isHere ? '●' : open ? (go ? '→' : '·') : '?'}
               </text>
-              {isTarget && <text x={p.x + 17} y={p.y - 14} fontSize="18" style={{ fill: 'var(--brass)' }}>★</text>}
+              {isTarget && (
+                <text x={p.x + 11} y={p.y - 10} fontSize="17" fill="#f0c75e" stroke="#10262b" strokeWidth="2.5" paintOrder="stroke">★</text>
+              )}
               {open && (
-                <text x={p.x} y={p.y + 36} textAnchor="middle" fontSize="11" style={{ fill: 'var(--ink)' }}>
+                <text x={p.x} y={p.y + 26} textAnchor="middle" fontSize="10.5" fontWeight="700"
+                  fill="#f6f0dd" stroke="#0b1d21" strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">
                   {LOCATION_NAMES[loc]}
                 </text>
               )}
               {open && (counts[loc] ?? 0) > 0 && (
-                <text x={p.x - 30} y={p.y - 14} fontSize="12" style={{ fill: 'var(--brass)' }}>👥{counts[loc]}</text>
+                <text x={p.x - 24} y={p.y - 11} fontSize="11" fontWeight="700"
+                  fill="#f0c75e" stroke="#0b1d21" strokeWidth="3" paintOrder="stroke">👥{counts[loc]}</text>
               )}
             </g>
           );
