@@ -3,21 +3,22 @@
 export type Pt = { x: number; y: number };
 
 export const MAP_W = 360;
-export const MAP_H = 440;
+export const MAP_H = 480; // harita görseli (public/harita.jpg) 3:4 oranında: 1086x1448 px
 
+// Konumlar çizilmiş harita görselindeki yerlere göre ayarlıdır (görsel pikseli x 360/1086).
 export const MAP_POS: Record<string, Pt> = {
-  yurt: { x: 62, y: 390 },
-  bahce: { x: 62, y: 305 },
-  mezarlik: { x: 62, y: 215 },
-  meydan: { x: 190, y: 350 },
-  kulube: { x: 305, y: 395 },
-  iskele: { x: 305, y: 305 },
-  pazar: { x: 190, y: 262 },
-  kayalik: { x: 305, y: 205 },
-  kutuphane: { x: 128, y: 160 },
-  kule: { x: 230, y: 112 },
-  mekanizma: { x: 300, y: 48 },
-  atolye: { x: 90, y: 48 },
+  yurt: { x: 81, y: 356 },
+  bahce: { x: 78, y: 282 },
+  mezarlik: { x: 50, y: 194 },
+  meydan: { x: 194, y: 300 },
+  kulube: { x: 262, y: 376 },
+  iskele: { x: 295, y: 265 },
+  pazar: { x: 189, y: 196 },
+  kayalik: { x: 317, y: 99 },
+  kutuphane: { x: 76, y: 113 },
+  kule: { x: 191, y: 66 },
+  mekanizma: { x: 244, y: 71 },
+  atolye: { x: 71, y: 46 },
 };
 
 // Yollar. Haritadan yalnızca komşu yerlere gidilir.
