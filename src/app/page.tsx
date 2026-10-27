@@ -297,6 +297,83 @@ const HELP: { q: string; a: string[] }[] = [
   ] },
 ];
 
+// Kayıt yuvaları ve baştan başlama. Oyun her adımda kendiliğinden kaydeder; yuvalar "bu ana dönebileyim" içindir.
+function SavePanel({ token, onChanged }: { token: string; onChanged: () => void }) {
+  const [slots, setSlots] = useState<{ slot: number; label: string | null; at: string | null }[]>([]);
+  const [armed, setArmed] = useState<string>('');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const post = useCallback(async (body: object) => {
+    const res = await fetch('/api/save', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error || 'Bir şeyler ters gitti');
+    return j;
+  }, [token]);
+
+  const reload = useCallback(() => {
+    post({ action: 'list' }).then((j) => setSlots(j.slots)).catch(() => {});
+  }, [post]);
+  useEffect(() => { reload(); }, [reload]);
+
+  const run = async (key: string, body: object, changes: boolean) => {
+    // İki dokunuşlu onay: yanlışlıkla silmeyi önler.
+    if (armed !== key) { setArmed(key); setMsg(''); return; }
+    setArmed('');
+    setBusy(true);
+    try {
+      const j = await post(body);
+      setMsg(j.message ?? 'Tamam');
+      reload();
+      if (changes) onChanged();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Hata');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
+
+  return (
+    <div className="panel" style={{ marginBottom: 16, padding: '12px 16px' }}>
+      <b>💾 Kayıt</b>
+      <p className="small" style={{ margin: '4px 0 8px' }}>
+        Oyun her adımda kendiliğinden kaydedilir; kapatıp tekrar açınca kaldığın yerden devam edersin.
+        Zor bir yere gelmeden önce aşağıdan ayrıca kayıt alabilir, sonra o ana dönebilirsin.
+      </p>
+      {slots.map((s) => (
+        <div key={s.slot} style={{ marginBottom: 10 }}>
+          <div className="small"><b>Yuva {s.slot}:</b> {s.label ? `${s.label} (${fmt(s.at)})` : 'boş'}</div>
+          <div className="row">
+            <button disabled={busy} onClick={() => run(`save${s.slot}`, { action: 'save', slot: s.slot }, false)}>
+              {armed === `save${s.slot}` ? (s.label ? 'Üzerine yazılsın mı? Evet' : 'Kaydet, emin misin?') : '💾 Buraya kaydet'}
+            </button>
+            {s.label && (
+              <button disabled={busy} onClick={() => run(`load${s.slot}`, { action: 'load', slot: s.slot }, true)}>
+                {armed === `load${s.slot}` ? 'Şimdiki oyun gidecek. Evet, yükle' : '📂 Yükle'}
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+      <hr style={{ opacity: 0.2 }} />
+      <div className="small">Baştan başlarsan ilerlemen, eşyaların ve güven puanların sıfırlanır. Adın ve yeteneğin kalır. Kayıt yuvaların silinmez.</div>
+      <div className="row">
+        <button disabled={busy} onClick={() => run('reset', { action: 'reset' }, true)}>
+          {armed === 'reset' ? 'Emin misin? Evet, baştan başla' : '🔄 Baştan başla'}
+        </button>
+        {armed && <button disabled={busy} onClick={() => setArmed('')}>Vazgeç</button>}
+      </div>
+      {msg && <p className="small" role="status" style={{ margin: '8px 0 0' }}>{msg}</p>}
+    </div>
+  );
+}
+
 function HelpPanel() {
   return (
     <div className="here" style={{ marginTop: 14 }}>
@@ -710,6 +787,7 @@ function Game(props: {
   const [showMap, setShowMap] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showOnline, setShowOnline] = useState(false);
+  const [showSave, setShowSave] = useState(false);
   const [online, setOnline] = useState<{ id: string; name: string; location: string }[]>([]);
   const onlineCh = useRef<RealtimeChannel | null>(null);
   const locRef = useRef(character.location);
@@ -897,7 +975,11 @@ function Game(props: {
         <button onClick={() => setShowHelp((v) => !v)} aria-expanded={showHelp}>
           ❓ Yardım
         </button>
+        <button onClick={() => setShowSave((v) => !v)} aria-expanded={showSave}>
+          💾 Kayıt
+        </button>
       </div>
+      {showSave && <SavePanel token={token} onChanged={() => { setShowSave(false); onRefresh(); }} />}
       {showOnline && (
         <div className="panel" style={{ marginBottom: 16, padding: '12px 16px' }}>
           <b>Şu an oyunda</b>
