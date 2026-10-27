@@ -329,7 +329,7 @@ export async function POST(req: NextRequest) {
     if (lantern > 9 || lantern < 1) return NextResponse.json({ error: 'Fener yağın hâlâ dolu ya da bitmiş. Çıt’ı yağ azalınca gönder' }, { status: 400 });
     meta.citReturnAt = (meta.moves ?? 0) + CIT_MISSION_MOVES;
     meta.citNight = nightsNow;
-    notices.push(`🤖 Çıt tıkırdayarak yağ aramaya çıktı. ${CIT_MISSION_MOVES} hamle sonra dönecek.`);
+    notices.push(`⚙️ Çıt tıkırdayarak yağ aramaya çıktı. ${CIT_MISSION_MOVES} hamle sonra dönecek.`);
     const { data: upd } = await admin.from('characters').update({ meta }).eq('id', ch.id).select().single();
     await logChoice(ch, 'cit', 'send', 'Çıt’ı yağ bulmaya gönderdi', fear, lantern);
     return respond(upd ?? ch, ch.current);
@@ -448,7 +448,7 @@ export async function POST(req: NextRequest) {
     if (meta.citReturnAt && meta.moves >= meta.citReturnAt) {
       lantern = Math.min(14, lantern + CIT_OIL);
       meta.citReturnAt = 0;
-      notices.push(`🤖 Çıt döndü ve bir kutu fener yağı buldu! (+${CIT_OIL} yağ)`);
+      notices.push(`⚙️ Çıt döndü ve bir kutu fener yağı buldu! (+${CIT_OIL} yağ)`);
       addTrust(trust, items, 'Çıt', 1, notices);
     }
     fear = clamp(fear + (picked.fear ?? 0), 0, 4);
@@ -524,7 +524,7 @@ export async function POST(req: NextRequest) {
       meta.citReturnAt = 0;
       if (!items.includes('yag_sisesi') && items.length < MAX_ITEMS) {
         items.push('yag_sisesi');
-        notices.push('🤖 Çıt sabah döndü ve yanında bir fener yağı şişesi getirdi.');
+        notices.push('⚙️ Çıt sabah döndü ve yanında bir fener yağı şişesi getirdi.');
       }
     }
     // Nene Selvi yastığın yanına bir kurabiye bırakır.
