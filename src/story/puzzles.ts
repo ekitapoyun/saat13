@@ -66,4 +66,62 @@ export const PUZZLES: Record<string, PuzzleDef> = {
       { id: 'pembe', label: 'Pembe', css: '#f0a6b8' },
     ],
   },
+  kabuk: {
+    id: 'kabuk',
+    type: 'order',
+    title: '🐚 Marl’ın kabuk bilmecesi',
+    intro: 'Kaptan Marl haritayı sana bilmeceyle veriyor: “Dört kabuğu doğru sıraya dizersen harita senin.” Kabukları soldan sağa diz.',
+    items: [
+      { id: 'mavi', label: 'Mavi kabuk', css: '#3d85c6' },
+      { id: 'kum', label: 'Kum kabuğu', css: '#d9c08a' },
+      { id: 'inci', label: 'İnci kabuğu', css: '#f2efe6' },
+      { id: 'mercan', label: 'Mercan kabuğu', css: '#e07a5f' },
+    ],
+    clues: [
+      'Kum kabuğu, mavi kabuğun hemen sağında.',
+      'İnci kabuğu en solda değil.',
+      'İnci kabuğu en sağda da değil.',
+      'Mercan kabuğu en sağda.',
+    ],
+  },
+  raf: {
+    id: 'raf',
+    type: 'numbers',
+    title: '📚 Günlük rafı',
+    intro: 'Kütüphane kedisinin gösterdiği rafta üç küçük kilit var. Her kilit bir sayı dizisinin sıradaki sayısını istiyor. Günlük bu rafta saklı.',
+    questions: [
+      { seq: [2, 4, 6, 8], q: 'Birinci kilit' },
+      { seq: [1, 2, 4, 8], q: 'İkinci kilit' },
+      { seq: [100, 90, 80, 70], q: 'Üçüncü kilit' },
+    ],
+  },
+  gelgit: {
+    id: 'gelgit',
+    type: 'numbers',
+    title: '🌊 Gelgit kadranı',
+    intro: 'Kayalıktaki taş kadranın üç çarkı var. Her çark bir dizinin sıradaki sayısına ayarlanınca su çekilir ve mağara açılır.',
+    questions: [
+      { seq: [3, 6, 12, 24], q: 'Birinci çark' },
+      { seq: [30, 27, 24, 21], q: 'İkinci çark' },
+      { seq: [1, 3, 6, 10], q: 'Üçüncü çark' },
+    ],
+  },
+  disli: {
+    id: 'disli',
+    type: 'order',
+    title: '⚙️ Dişli sırası',
+    intro: 'Mekanizma Odası’ndaki dört dişli yanlış sırada duruyor. Doğru sıraya dizilirlerse mekanizma çalışır. Dişlileri soldan sağa diz.',
+    items: [
+      { id: 'minik', label: 'Minik dişli', css: '#c9a66b' },
+      { id: 'kucuk', label: 'Küçük dişli', css: '#b8863b' },
+      { id: 'orta', label: 'Orta dişli', css: '#9c6b2a' },
+      { id: 'buyuk', label: 'Büyük dişli', css: '#7a4e1d' },
+    ],
+    clues: [
+      'Orta dişli, büyük dişlinin hemen solunda.',
+      'Minik dişli, küçük dişliden önce gelir.',
+      'Küçük dişli en solda değil.',
+      'Küçük dişli en sağda da değil.',
+    ],
+  },
 };
