@@ -24,7 +24,7 @@ type Data = {
 };
 
 const SKILL: Record<string, string> = { gozlemci: 'Gözlemci', konuskan: 'Konuşkan', cevik: 'Çevik', tamirci: 'Tamirci' };
-const KIND: Record<string, string> = { choice: 'Seçim', travel: 'Yürüyüş', skill: 'Yetenek', use: 'Eşya', rest: 'Uyku', goal: 'Görev tamamlama', chapter: 'Bölüm' };
+const KIND: Record<string, string> = { choice: 'Seçim', travel: 'Yürüyüş', skill: 'Yetenek', use: 'Eşya', rest: 'Uyku', goal: 'Görev tamamlama', puzzle: 'Bulmaca çözdü', cit: 'Çıt', chapter: 'Bölüm' };
 const fmt = (d: string) => (d ? new Date(d).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' }) : '-');
 
 export default function AdminPage() {
