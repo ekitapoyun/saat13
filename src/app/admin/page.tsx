@@ -12,6 +12,10 @@ type Player = {
   items: string[]; flags: string[]; trust: Record<string, number>; lastScene: string;
   createdAt: string; lastActive: string; activeToday: boolean;
 };
+type Hist = {
+  id: number; chapter: number; node: number; location: string | null; kind: string; choice_label: string | null;
+  scene_excerpt: string | null; fear_after: number | null; lantern_after: number | null; created_at: string;
+};
 type Memory = { id: string; name: string; description: string; voice: string | null; created_at: string };
 type Data = {
   stats: { players: number; activeToday: number; finishedChapter1: number; avgProgress: number; inChapter2: number };
@@ -20,6 +24,7 @@ type Data = {
 };
 
 const SKILL: Record<string, string> = { gozlemci: 'Gözlemci', konuskan: 'Konuşkan', cevik: 'Çevik', tamirci: 'Tamirci' };
+const KIND: Record<string, string> = { choice: 'Seçim', travel: 'Yürüyüş', skill: 'Yetenek', use: 'Eşya', rest: 'Uyku', goal: 'Görev tamamlama', chapter: 'Bölüm' };
 const fmt = (d: string) => (d ? new Date(d).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' }) : '-');
 
 export default function AdminPage() {
@@ -30,6 +35,24 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');
   const [open, setOpen] = useState<string | null>(null);
+  const [hist, setHist] = useState<Record<string, Hist[] | string>>({});
+
+  async function loadHistory(id: string) {
+    if (!session) return;
+    setHist((h) => ({ ...h, [id]: 'Yükleniyor…' }));
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ action: 'history', characterId: id }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'Okunamadı');
+      setHist((h) => ({ ...h, [id]: j.history as Hist[] }));
+    } catch (e) {
+      setHist((h) => ({ ...h, [id]: e instanceof Error ? e.message : 'Okunamadı' }));
+    }
+  }
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true); });
@@ -122,7 +145,7 @@ export default function AdminPage() {
               <tbody>
                 {list.map((p) => (
                   <Fragment key={p.id}>
-                    <tr onClick={() => setOpen(open === p.id ? null : p.id)}
+                    <tr onClick={() => { const o = open === p.id; setOpen(o ? null : p.id); if (!o) loadHistory(p.id); }}
                       style={{ borderTop: '1px solid var(--line)', cursor: 'pointer' }}>
                       <td style={{ padding: 8 }}>
                         <b>{p.name}</b> {p.activeToday && <span title="Son 24 saatte aktif">🟢</span>}
@@ -156,6 +179,24 @@ export default function AdminPage() {
                             </div>
                             <div className="small" style={{ marginTop: 6 }}>
                               <b>Bulunan ipuçları:</b> {p.flags.length ? p.flags.join(', ') : 'henüz yok'}
+                            </div>
+                            <div style={{ marginTop: 10 }}>
+                              <b className="small">Seçim geçmişi (son 80)</b>
+                              {typeof hist[p.id] === 'string' && <p className="small">{hist[p.id] as string}</p>}
+                              {Array.isArray(hist[p.id]) && (hist[p.id] as Hist[]).length === 0 && <p className="small">Henüz kayıt yok.</p>}
+                              {Array.isArray(hist[p.id]) && (hist[p.id] as Hist[]).map((h) => (
+                                <details key={h.id} style={{ margin: '4px 0' }}>
+                                  <summary className="small" style={{ cursor: 'pointer' }}>
+                                    {fmt(h.created_at)} · {h.chapter}.{h.node} · {KIND[h.kind] ?? h.kind}: {h.choice_label}
+                                  </summary>
+                                  <div className="small" style={{ margin: '4px 0 4px 14px' }}>
+                                    {h.location ? `Yer: ${LOCATION_NAMES[h.location] ?? h.location}` : ''}
+                                    {h.fear_after !== null && ` · Korku sonrası: ${h.fear_after}`}
+                                    {h.lantern_after !== null && ` · Yağ sonrası: ${h.lantern_after}`}
+                                    {h.scene_excerpt && <p style={{ margin: '4px 0' }}>Seçimin yapıldığı sahne: {h.scene_excerpt}…</p>}
+                                  </div>
+                                </details>
+                              ))}
                             </div>
                             <div style={{ marginTop: 10 }}>
                               <b className="small">Son gördüğü sahne</b>
