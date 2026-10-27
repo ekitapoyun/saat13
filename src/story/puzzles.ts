@@ -72,10 +72,10 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     title: '🐚 Marl’ın kabuk bilmecesi',
     intro: 'Kaptan Marl haritayı sana bilmeceyle veriyor: “Dört kabuğu doğru sıraya dizersen harita senin.” Kabukları soldan sağa diz.',
     items: [
-      { id: 'mavi', label: 'Mavi kabuk', css: '#3d85c6' },
-      { id: 'kum', label: 'Kum kabuğu', css: '#d9c08a' },
       { id: 'inci', label: 'İnci kabuğu', css: '#f2efe6' },
       { id: 'mercan', label: 'Mercan kabuğu', css: '#e07a5f' },
+      { id: 'kum', label: 'Kum kabuğu', css: '#d9c08a' },
+      { id: 'mavi', label: 'Mavi kabuk', css: '#3d85c6' },
     ],
     clues: [
       'Kum kabuğu, mavi kabuğun hemen sağında.',
@@ -112,16 +112,16 @@ export const PUZZLES: Record<string, PuzzleDef> = {
     title: '⚙️ Dişli sırası',
     intro: 'Mekanizma Odası’ndaki dört dişli yanlış sırada duruyor. Doğru sıraya dizilirlerse mekanizma çalışır. Dişlileri soldan sağa diz.',
     items: [
-      { id: 'minik', label: 'Minik dişli', css: '#c9a66b' },
-      { id: 'kucuk', label: 'Küçük dişli', css: '#b8863b' },
-      { id: 'orta', label: 'Orta dişli', css: '#9c6b2a' },
-      { id: 'buyuk', label: 'Büyük dişli', css: '#7a4e1d' },
+      { id: 'demir', label: 'Demir dişli', css: '#6b7280' },
+      { id: 'bakir', label: 'Bakır dişli', css: '#b4643a' },
+      { id: 'pirinc', label: 'Pirinç dişli', css: '#c9a227' },
+      { id: 'gumus', label: 'Gümüş dişli', css: '#c0c7ce' },
     ],
     clues: [
-      'Orta dişli, büyük dişlinin hemen solunda.',
-      'Minik dişli, küçük dişliden önce gelir.',
-      'Küçük dişli en solda değil.',
-      'Küçük dişli en sağda da değil.',
+      'Gümüş dişli, demir dişlinin hemen solunda.',
+      'Pirinç dişli, bakır dişliden önce gelir.',
+      'Bakır dişli en solda değil.',
+      'Bakır dişli en sağda da değil.',
     ],
   },
 };
