@@ -103,6 +103,30 @@ function finishedScene(name: string, chapter: number, trust: Record<string, numb
   };
 }
 
+// Seçim günlüğü: oyuncunun her eylemi kaydedilir (yönetici panelinde görünür).
+// Tablo yoksa ya da yazılamazsa oyun etkilenmez.
+async function logChoice(
+  ch: any, kind: string, id: string, label: string, fear: number, lantern: number
+) {
+  try {
+    const { error } = await admin.from('choice_log').insert({
+      character_id: ch.id,
+      chapter: ch.chapter ?? 1,
+      node: ch.node,
+      location: ch.location,
+      kind,
+      choice_id: id.slice(0, 20),
+      choice_label: label.slice(0, 200),
+      scene_excerpt: String(ch.current?.baseText ?? ch.current?.text ?? '').slice(0, 600),
+      fear_after: fear,
+      lantern_after: lantern,
+    });
+    if (error) console.error('Seçim kaydedilemedi:', error.message);
+  } catch (e) {
+    console.error('Seçim kaydedilemedi:', e instanceof Error ? e.message : e);
+  }
+}
+
 function flagHash(flags: Record<string, unknown>) {
   return createHash('sha1').update(JSON.stringify(Object.keys(flags).sort())).digest('hex').slice(0, 10);
 }
@@ -141,7 +165,7 @@ function parseScene(raw: string, allowedNpcs: Set<string>): { scene: StoredScene
       trust: [-1, 0, 1].includes(c.trust) ? c.trust : 0,
     }));
     // Seçenek kimliği özel kimliklerle çakışmasın.
-    if (choices.some((c) => !c.label || ['rest', 'skill', 'next', 'replay', 'restart', 'travel'].includes(c.id))) return null;
+    if (choices.some((c) => !c.label || ['rest', 'skill', 'goal', 'next', 'replay', 'restart', 'travel'].includes(c.id))) return null;
     return { scene: { text: j.text, choices }, npc };
   } catch (e) {
     console.error('Sahne ayrıştırılamadı:', e instanceof Error ? e.message : e, '| ham çıktı:', raw.slice(0, 1500));
@@ -194,7 +218,7 @@ async function generate(
     system: `${BIBLE}\n${RULES}`,
     messages: [{
       role: 'user',
-      content: `Oyuncunun durumu:\n${JSON.stringify(state)}\n\nBir sonraki sahneyi yaz. Eğer "yeni_bolum_basladi" doğruysa yeni bir bölümün ilk sahnesidir: "bolum.ozet" bilgisini oyuncuya anlatma, yalnızca o havayı taşıyan sıcak, merak uyandıran bir açılış yaz. Eğer "yeni_gece_basladi" doğruysa oyuncu uyuyup yeni geceye uyandı: sahneyi kısa bir uyanışla aç (Nene Selvi feneri yağla dolduruyor, sıcak bir ayrıntı), sonra daha önce bulunan ipuçlarını hatırlayarak hikâyeyi kaldığı yerden sürdür. Eğer "korkudan_yurda_dondu" doğruysa oyuncu çok ürkerek yurda koştu: sahneyi Nene Selvi'nin onu sakinleştirmesiyle aç (sıcak bir içecek, battaniye), sonra hikâyeyi kaldığı yerden sürdür. "tamamlanan_duraklar" listesindeki olaylar çoktan yaşandı: onları yeniden yaşatma ve baştan anlatma, yalnızca gerekirse geçmişte kalmış bir ayrıntı olarak an. Eğer "atlanan_durak" doluysa o durağın olayı ekranda anlatılmadan çözülmüş sayılır: sahneyi o olayın nasıl çözüldüğünü bir ya da iki cümleyle özetleyerek aç, sonra yeni durağın hikâyesine geç. Aksi durumda önce oyuncunun son seçimine DOĞRUDAN karşılık ver: seçtiği eylem sahnede gerçekleşsin, sorduğu soru cevaplansın, konuştuğu kişi cevap versin. "henuz_sahneye_girmeyecek_karakterler" listesindeki karakterleri sahneye sokma, yalnızca belirsiz bir iz (uzaktan ses, gölge) göstermen yeterli. "guven_puanlari" yüksek olan karakterler oyuncuya daha sıcak ve yardımsever davransın, hiç puanı olmayanlar mesafeli ama kibar olsun. "bilinen_npcler" listesindeki karakterleri tutarlı kullan. Anlatım ikinci tekil şahıs ve şimdiki zaman olsun (“kapıyı itiyorsun”, “Nene Selvi sana bakıyor”). Kısa, sade, doğal ve akıcı Türkçe kullan. Sahnede en fazla bir benzetme olsun. Hikâyeyi her sahnede gözle görülür biçimde ilerlet: yeni bir bilgi, yeni bir kişi ya da yeni bir yer olsun. Oyuncu bu dönüm noktasında ${steps}. sahnede. 3. sahneden itibaren bitiş bayrağını seçeneklerden en az birine MUTLAKA ver ve hikâyeyi hedefe ulaştır.\nGerilim ve gizem ekle: sahneyi açık kalan bir soru ya da küçük bir ürperti (tuhaf ses, kıpırdayan gölge, kaybolan eşya) ile bitir. Seçenekler gerçek ikilem olsun (biri merak, biri temkin; her birinin bedeli ve getirisi olsun, hiçbiri bariz olmasın). Ürpertici bir şeye yaklaşan ya da dokunan seçeneğe "fear": 1 ver, rahatlatan seçeneğe (dost bir yüz, ışık, espri) -1. Seçeneklerin en az birine "fear": 1 ver. Dehşet, kan ve gerçek tehlike olmasın, ürperti hep güvenli ve biraz komik kalsın.\nBir karakterle konuşmayı, ona yardım etmeyi ya da dürüst davranmayı içeren seçeneğe "npc" (karakterin adı) ve "trust": 1 ekle; kaba ya da yalancı davranış için -1.\nYalnızca tek bir JSON nesnesi döndür, öncesine ve sonrasına hiçbir şey yazma. Metin içindeki konuşmalarda düz çift tırnak yerine “ ” kullan. Paragraflar arasına \\n\\n koy. "fear" değeri -1, 0 ya da 1 sayısı olmalı.`,
+      content: `Oyuncunun durumu:\n${JSON.stringify(state)}\n\nBir sonraki sahneyi yaz. Eğer "yeni_bolum_basladi" doğruysa yeni bir bölümün ilk sahnesidir: "bolum.ozet" bilgisini oyuncuya anlatma, yalnızca o havayı taşıyan sıcak, merak uyandıran bir açılış yaz. Eğer "yeni_gece_basladi" doğruysa oyuncu uyuyup yeni geceye uyandı: sahneyi kısa bir uyanışla aç (Nene Selvi feneri yağla dolduruyor, sıcak bir ayrıntı), sonra daha önce bulunan ipuçlarını hatırlayarak hikâyeyi kaldığı yerden sürdür. Eğer "korkudan_yurda_dondu" doğruysa oyuncu çok ürkerek yurda koştu: sahneyi Nene Selvi'nin onu sakinleştirmesiyle aç (sıcak bir içecek, battaniye), sonra hikâyeyi kaldığı yerden sürdür. "tamamlanan_duraklar" listesindeki olaylar çoktan yaşandı: onları yeniden yaşatma ve baştan anlatma, yalnızca gerekirse geçmişte kalmış bir ayrıntı olarak an. Eğer "atlanan_durak" doluysa o durağın olayı ekranda anlatılmadan çözülmüş sayılır: sahneyi o olayın nasıl çözüldüğünü bir ya da iki cümleyle özetleyerek aç, sonra yeni durağın hikâyesine geç. Aksi durumda önce oyuncunun son seçimine DOĞRUDAN karşılık ver: seçtiği eylem sahnede gerçekleşsin, sorduğu soru cevaplansın, konuştuğu kişi cevap versin. "henuz_sahneye_girmeyecek_karakterler" listesindeki karakterleri sahneye sokma, yalnızca belirsiz bir iz (uzaktan ses, gölge) göstermen yeterli. "guven_puanlari" yüksek olan karakterler oyuncuya daha sıcak ve yardımsever davransın, hiç puanı olmayanlar mesafeli ama kibar olsun. "bilinen_npcler" listesindeki karakterleri tutarlı kullan. Anlatım ikinci tekil şahıs ve şimdiki zaman olsun (“kapıyı itiyorsun”, “Nene Selvi sana bakıyor”). Kısa, sade, doğal ve akıcı Türkçe kullan. Sahnede en fazla bir benzetme olsun. Hikâyeyi her sahnede gözle görülür biçimde ilerlet: yeni bir bilgi, yeni bir kişi ya da yeni bir yer olsun. Oyuncu bu dönüm noktasında ${steps}. sahnede. Bitiş bayrağı yalnızca oyuncu hedef dönüm noktasının mekânındaysa ve o durakta en az 2. sahnedeyse geçerlidir. Oyuncu "hedef_donum_noktasi.mekan" dışında bir yerdeyse seçeneklerden birini ("to" ile) hedef mekâna götüren bir yol yap. 3. sahneden itibaren, oyuncu hedef mekândayken, bitiş bayrağını seçeneklerden en az birine MUTLAKA ver ve hikâyeyi hedefe ulaştır.\nGerilim ve gizem ekle: sahneyi açık kalan bir soru ya da küçük bir ürperti (tuhaf ses, kıpırdayan gölge, kaybolan eşya) ile bitir. Seçenekler gerçek ikilem olsun (biri merak, biri temkin; her birinin bedeli ve getirisi olsun, hiçbiri bariz olmasın). Ürpertici bir şeye yaklaşan ya da dokunan seçeneğe "fear": 1 ver, rahatlatan seçeneğe (dost bir yüz, ışık, espri) -1. Seçeneklerin en az birine "fear": 1 ver. Dehşet, kan ve gerçek tehlike olmasın, ürperti hep güvenli ve biraz komik kalsın.\nBir karakterle konuşmayı, ona yardım etmeyi ya da dürüst davranmayı içeren seçeneğe "npc" (karakterin adı) ve "trust": 1 ekle; kaba ya da yalancı davranış için -1.\nYalnızca tek bir JSON nesnesi döndür, öncesine ve sonrasına hiçbir şey yazma. Metin içindeki konuşmalarda düz çift tırnak yerine “ ” kullan. Paragraflar arasına \\n\\n koy. "fear" değeri -1, 0 ya da 1 sayısı olmalı.`,
     }],
   });
   const block = msg.content.find((b) => b.type === 'text');
@@ -278,6 +302,7 @@ export async function POST(req: NextRequest) {
     lantern = clamp(lantern + (def.use.lantern ?? 0), 0, 14);
     notices.push(def.use.text);
     const { data: upd } = await admin.from('characters').update({ fear, lantern, items }).eq('id', ch.id).select().single();
+    await logChoice(ch, 'use', useItem, `Kullandı: ${def.label}`, fear, lantern);
     return respond(upd ?? ch, ch.current);
   }
 
@@ -318,10 +343,12 @@ export async function POST(req: NextRequest) {
   let scared = false;
   let isNew = false;
   let skipped: Node | null = null;
+  let logEntry: { kind: string; id: string; label: string } | null = null;
 
   if (picked && ['next', 'replay', 'restart'].includes(picked.id)) {
     // 4) Bölüm sonu seçenekleri: sonraki bölüm ya da yeniden oynama.
     if (!ch.current?.finished) return NextResponse.json({ error: 'Bölüm henüz bitmedi' }, { status: 400 });
+    logEntry = { kind: 'chapter', id: picked.id, label: picked.label };
     if (picked.id === 'next') {
       if (chapter >= MAX_CHAPTER) return NextResponse.json({ error: 'Sonraki bölüm yakında' }, { status: 400 });
       chapter += 1;
@@ -365,6 +392,7 @@ export async function POST(req: NextRequest) {
     const current = { ...ch.current, text, choices, baseText: base };
     const { data: upd } = await admin.from('characters')
       .update({ fear, items, trust, meta, current }).eq('id', ch.id).select().single();
+    await logChoice(ch, 'skill', opt.kind, opt.label, fear, lantern);
     return respond(upd ?? ch, current);
   } else if (picked) {
     // 6) Normal seçim ya da haritadan yolculuk.
@@ -383,7 +411,17 @@ export async function POST(req: NextRequest) {
     const cur = nodes[node - 1];
     // Yalnızca şu anki dönüm noktasının bayrağı kabul edilir. Modelin icat ettiği ya da
     // ileriki bir noktanın bayrağı hikâyeyi atlatamaz.
-    if (picked.flag && picked.flag === cur?.flag) flags[picked.flag] = true;
+    // Bayrak yalnızca durağın kendi mekânında ve en az 2. sahneden itibaren kabul edilir:
+    // hiçbir durak, oraya uğramadan ya da tek sahnede geçilemez.
+    const atStop = Boolean(cur) && ch.location === cur.location && (ch.current?.steps ?? 1) >= 2;
+    if (picked.flag && picked.flag === cur?.flag && atStop) flags[picked.flag] = true;
+    // Sunucunun eklediği "görevi tamamla" seçeneği (AI bayrağı vermezse takılmamak için).
+    if (picked.id === 'goal' && cur && atStop) { flags[cur.flag] = true; skipped = cur; }
+    logEntry = {
+      kind: travelTo ? 'travel' : picked.id === 'rest' ? 'rest' : picked.id === 'goal' ? 'goal' : 'choice',
+      id: picked.id,
+      label: picked.label,
+    };
     // Güven puanı: bilinen karakter (sahneye girmiş olmalı) ya da dünya hafızasındaki karakter.
     if (picked.npc && picked.trust) {
       let ok = false;
@@ -400,8 +438,6 @@ export async function POST(req: NextRequest) {
     if (picked.to && picked.to !== location && spooky.includes(picked.to)) fear = Math.min(4, fear + 1);
     if (lantern === 4 || lantern === 2) fear = Math.min(4, fear + 1);
     if (picked.to) location = picked.to;
-    // Güvenlik ağı: oyuncu bir dönüm noktasında 5 sahneden fazla kalırsa hikâye kendiliğinden ilerler.
-    if (cur && !flags[cur.flag] && (ch.current?.steps ?? 0) >= 8) { flags[cur.flag] = true; skipped = cur; }
     if (cur && flags[cur.flag]) node += 1;
 
     // Korku sınırı: ceza yok, yumuşak dönüş.
@@ -463,6 +499,11 @@ export async function POST(req: NextRequest) {
     const opt = skillOption({ skill: ch.skill, items, meta, chapter }, nodes[node - 1], location);
     if (opt) storedChoices.push({ id: 'skill', label: opt.label });
   }
+  // Takılma önlemi: durağın mekânında 6 sahne geçtiyse görevi tamamlama seçeneği çıkar.
+  const stop = nodes[node - 1];
+  if (!isNight && !finished && stop && !flags[stop.flag] && location === stop.location && steps >= 6) {
+    storedChoices.push({ id: 'goal', label: `✔️ Bu durağın işini tamamla (${stop.title})`, flag: stop.flag });
+  }
   const shown: StoredScene = { text: scene.text, choices: storedChoices };
 
   const { data: updated } = await admin
@@ -475,6 +516,7 @@ export async function POST(req: NextRequest) {
     .select()
     .single();
 
+  if (logEntry) await logChoice(ch, logEntry.kind, logEntry.id, logEntry.label, fear, lantern);
   return respond(updated ?? ch, shown);
 }
 
