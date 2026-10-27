@@ -195,6 +195,38 @@ function Login() {
 }
 
 // Yardım menüsü: kısa, çocuklara göre yazılmış açıklamalar. Sunucudaki gerçek kurallarla aynı tutulmalı.
+// Çıt'ın simgesi: hurda metalden yapılmış küçük dost. Kubbe başlı, paslı sarı varil gövdeli, ince bacaklı.
+function CitIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" role="img" aria-label="Çıt" style={{ verticalAlign: '-4px' }}>
+      {/* kulaklar: eski kapak ve saat kadranı */}
+      <circle cx="5.2" cy="8.6" r="3" fill="#9aa3ab" stroke="#4a4f55" strokeWidth="1" />
+      <circle cx="5.2" cy="8.6" r="1.1" fill="#4a4f55" />
+      <circle cx="26.8" cy="8.6" r="3" fill="#b9c1c7" stroke="#4a4f55" strokeWidth="1" />
+      <circle cx="26.8" cy="8.6" r="1.1" fill="#4a4f55" />
+      {/* kubbe baş */}
+      <path d="M8.5 12 Q8.5 2.2 16 2.2 Q23.5 2.2 23.5 12 Z" fill="#c4ccd2" stroke="#4a4f55" strokeWidth="1.3" />
+      <path d="M11 8 Q11.8 4.6 15 4.2" fill="none" stroke="#f2f5f7" strokeWidth="1.2" strokeLinecap="round" />
+      <circle cx="13" cy="9" r="1.4" fill="#2b1b0e" />
+      <circle cx="19" cy="9" r="1.4" fill="#2b1b0e" />
+      <rect x="8" y="11.6" width="16" height="2" rx=".8" fill="#6f747a" />
+      {/* varil gövde */}
+      <rect x="7.5" y="13.5" width="17" height="10" rx="1.6" fill="#d9a521" stroke="#6b3f17" strokeWidth="1.3" />
+      <path d="M7.8 17 H24.2 M7.8 20.2 H24.2" stroke="#8f5a1c" strokeWidth=".9" />
+      <path d="M9 21.5 q2 -3 4 -1 t3 -2 l1.2 2.8 z" fill="#a8461a" opacity=".6" />
+      <circle cx="21" cy="15.5" r="1.1" fill="#a8461a" opacity=".85" />
+      <circle cx="11" cy="15.8" r=".8" fill="#a8461a" opacity=".85" />
+      {/* kollar */}
+      <path d="M7.5 16 Q4 18 4.6 22" fill="none" stroke="#5b4a3a" strokeWidth="1.3" strokeLinecap="round" />
+      <path d="M24.5 16 Q28 18 27.4 22" fill="none" stroke="#5b4a3a" strokeWidth="1.3" strokeLinecap="round" />
+      {/* ince bacaklar, çan ayaklar */}
+      <path d="M12 23.5 L11 28.5 M20 23.5 L21 28.5" stroke="#5b4a3a" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M8.6 30.5 Q9 27.8 11 27.8 Q13 27.8 13.4 30.5 Z" fill="#9aa3ab" stroke="#4a4f55" strokeWidth="1" />
+      <path d="M18.6 30.5 Q19 27.8 21 27.8 Q23 27.8 23.4 30.5 Z" fill="#9aa3ab" stroke="#4a4f55" strokeWidth="1" />
+    </svg>
+  );
+}
+
 const HELP: { q: string; a: string[] }[] = [
   { q: '🎮 Oyun nasıl oynanır?', a: [
     'Hikâyeyi okursun, altındaki seçeneklerden birine dokunursun. Hikâye seçtiğin şeye göre devam eder.',
@@ -270,7 +302,7 @@ function HelpPanel() {
     <div className="here" style={{ marginTop: 14 }}>
       {HELP.map((h) => (
         <details key={h.q} style={{ marginBottom: 8 }}>
-          <summary style={{ cursor: 'pointer', padding: '6px 0' }}><b>{h.q}</b></summary>
+          <summary style={{ cursor: 'pointer', padding: '6px 0' }}><b>{h.q.startsWith('🤖') ? <><CitIcon /> {h.q.slice(2).trim()}</> : h.q}</b></summary>
           {h.a.map((line, i) => <p key={i} className="small" style={{ margin: '4px 0 4px 14px' }}>{line}</p>)}
         </details>
       ))}
@@ -911,7 +943,7 @@ function Game(props: {
         )}
         {character.cit.available && (
           <div className="here" style={{ marginTop: 10 }}>
-            <b>🤖 Çıt</b> <span className="small">
+            <b><CitIcon size={22} /> Çıt</b> <span className="small">
               {character.cit.away
                 ? `yağ arıyor, ${character.cit.movesLeft} hamle sonra dönecek`
                 : character.cit.rested
@@ -920,7 +952,7 @@ function Game(props: {
             </span>
             <div className="small">Fener yağı azalınca Çıt’ı yağ bulmaya gönderebilirsin. Böylece yağ bitmeden dönmek zorunda kalmazsın.</div>
             <div className="row">
-              <button disabled={busy || !character.cit.canSend} onClick={onCit}>🤖 Çıt’ı yağ bulmaya gönder</button>
+              <button disabled={busy || !character.cit.canSend} onClick={onCit}><CitIcon size={18} /> Çıt’ı yağ bulmaya gönder</button>
             </div>
             {!character.cit.canSend && !character.cit.away && !character.cit.rested && (
               <div className="small">{character.lantern > 9 ? 'Fener yağı 9’un altına düşünce gönderebilirsin.' : ''}</div>
