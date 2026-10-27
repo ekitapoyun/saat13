@@ -8,6 +8,7 @@ import {
   TRUST_MAX, TRUST_GIFT_AT, type Node,
 } from '@/story/nodes';
 import { ITEMS, isTradable } from '@/story/items';
+import { PUZZLES } from '@/story/puzzles';
 import { neighbors, isUnlocked, LOCATION_NAMES } from '@/story/map';
 
 // Durum burada, sunucuda tutulur ve doğrulanır. AI yalnızca öneri yapar.
@@ -27,7 +28,16 @@ type StoredChoice = {
 };
 type StoredScene = { text: string; choices: StoredChoice[] };
 type NewNpc = { name: string; description: string; voice: string };
-type Meta = { moves?: number; nights?: number; craftNight?: number; skillAt?: string; replays?: number; done?: number[] };
+type Meta = {
+  moves?: number; nights?: number; craftNight?: number; skillAt?: string; replays?: number; done?: number[];
+  citReturnAt?: number; citNight?: number; puzzleOk?: string;
+};
+
+// Çıt: oyuncunun yan karakteri. Fener yağı bulmaya gönderilince 3 hamle sonra +5 yağla döner.
+const CIT_MISSION_MOVES = 3;
+const CIT_OIL = 5;
+const citAvailable = (chapter: number, flags: Record<string, boolean>, trust: Record<string, number>) =>
+  chapter >= 2 || Boolean(flags.cit_tanisti) || (trust['Çıt'] ?? 0) >= 1;
 
 const publicScene = (s: StoredScene) => ({
   text: s.text,
@@ -165,7 +175,7 @@ function parseScene(raw: string, allowedNpcs: Set<string>): { scene: StoredScene
       trust: [-1, 0, 1].includes(c.trust) ? c.trust : 0,
     }));
     // Seçenek kimliği özel kimliklerle çakışmasın.
-    if (choices.some((c) => !c.label || ['rest', 'skill', 'goal', 'next', 'replay', 'restart', 'travel'].includes(c.id))) return null;
+    if (choices.some((c) => !c.label || ['rest', 'skill', 'goal', 'puzzle', 'puzzle_done', 'next', 'replay', 'restart', 'travel'].includes(c.id))) return null;
     return { scene: { text: j.text, choices }, npc };
   } catch (e) {
     console.error('Sahne ayrıştırılamadı:', e instanceof Error ? e.message : e, '| ham çıktı:', raw.slice(0, 1500));
@@ -200,7 +210,7 @@ async function generate(
     atlanan_durak: ch.skipped ? { baslik: ch.skipped.title, hedef: ch.skipped.goal } : null,
     mekan: location,
     izinli_mekanlar: LOCATION_CODES,
-    hedef_donum_noktasi: { no: node.n, baslik: node.title, mekan: node.location, hedef: node.goal, bitis_bayragi: node.flag },
+    hedef_donum_noktasi: { no: node.n, baslik: node.title, mekan: node.location, hedef: node.goal, bitis_bayragi: node.puzzle ? null : node.flag, bulmaca: node.puzzle ? (PUZZLES[node.puzzle]?.title ?? 'bulmaca') : null },
     bu_donum_noktasinda_kacinci_sahne: steps,
     yeni_gece_basladi: Boolean(ch.current?.night),
     korkudan_yurda_dondu: Boolean(ch.scared),
@@ -218,7 +228,7 @@ async function generate(
     system: `${BIBLE}\n${RULES}`,
     messages: [{
       role: 'user',
-      content: `Oyuncunun durumu:\n${JSON.stringify(state)}\n\nBir sonraki sahneyi yaz. Eğer "yeni_bolum_basladi" doğruysa yeni bir bölümün ilk sahnesidir: "bolum.ozet" bilgisini oyuncuya anlatma, yalnızca o havayı taşıyan sıcak, merak uyandıran bir açılış yaz. Eğer "yeni_gece_basladi" doğruysa oyuncu uyuyup yeni geceye uyandı: sahneyi kısa bir uyanışla aç (Nene Selvi feneri yağla dolduruyor, sıcak bir ayrıntı), sonra daha önce bulunan ipuçlarını hatırlayarak hikâyeyi kaldığı yerden sürdür. Eğer "korkudan_yurda_dondu" doğruysa oyuncu çok ürkerek yurda koştu: sahneyi Nene Selvi'nin onu sakinleştirmesiyle aç (sıcak bir içecek, battaniye), sonra hikâyeyi kaldığı yerden sürdür. "tamamlanan_duraklar" listesindeki olaylar çoktan yaşandı: onları yeniden yaşatma ve baştan anlatma, yalnızca gerekirse geçmişte kalmış bir ayrıntı olarak an. Eğer "atlanan_durak" doluysa o durağın olayı ekranda anlatılmadan çözülmüş sayılır: sahneyi o olayın nasıl çözüldüğünü bir ya da iki cümleyle özetleyerek aç, sonra yeni durağın hikâyesine geç. Aksi durumda önce oyuncunun son seçimine DOĞRUDAN karşılık ver: seçtiği eylem sahnede gerçekleşsin, sorduğu soru cevaplansın, konuştuğu kişi cevap versin. "henuz_sahneye_girmeyecek_karakterler" listesindeki karakterleri sahneye sokma, yalnızca belirsiz bir iz (uzaktan ses, gölge) göstermen yeterli. "guven_puanlari" yüksek olan karakterler oyuncuya daha sıcak ve yardımsever davransın, hiç puanı olmayanlar mesafeli ama kibar olsun. "bilinen_npcler" listesindeki karakterleri tutarlı kullan. Anlatım ikinci tekil şahıs ve şimdiki zaman olsun (“kapıyı itiyorsun”, “Nene Selvi sana bakıyor”). Kısa, sade, doğal ve akıcı Türkçe kullan. Sahnede en fazla bir benzetme olsun. Hikâyeyi her sahnede gözle görülür biçimde ilerlet: yeni bir bilgi, yeni bir kişi ya da yeni bir yer olsun. Oyuncu bu dönüm noktasında ${steps}. sahnede. Bitiş bayrağı yalnızca oyuncu hedef dönüm noktasının mekânındaysa ve o durakta en az 2. sahnedeyse geçerlidir. Oyuncu "hedef_donum_noktasi.mekan" dışında bir yerdeyse seçeneklerden birini ("to" ile) hedef mekâna götüren bir yol yap. 3. sahneden itibaren, oyuncu hedef mekândayken, bitiş bayrağını seçeneklerden en az birine MUTLAKA ver ve hikâyeyi hedefe ulaştır.\nGerilim ve gizem ekle: sahneyi açık kalan bir soru ya da küçük bir ürperti (tuhaf ses, kıpırdayan gölge, kaybolan eşya) ile bitir. Seçenekler gerçek ikilem olsun (biri merak, biri temkin; her birinin bedeli ve getirisi olsun, hiçbiri bariz olmasın). Ürpertici bir şeye yaklaşan ya da dokunan seçeneğe "fear": 1 ver, rahatlatan seçeneğe (dost bir yüz, ışık, espri) -1. Seçeneklerin en az birine "fear": 1 ver. Dehşet, kan ve gerçek tehlike olmasın, ürperti hep güvenli ve biraz komik kalsın.\nBir karakterle konuşmayı, ona yardım etmeyi ya da dürüst davranmayı içeren seçeneğe "npc" (karakterin adı) ve "trust": 1 ekle; kaba ya da yalancı davranış için -1.\nYalnızca tek bir JSON nesnesi döndür, öncesine ve sonrasına hiçbir şey yazma. Metin içindeki konuşmalarda düz çift tırnak yerine “ ” kullan. Paragraflar arasına \\n\\n koy. "fear" değeri -1, 0 ya da 1 sayısı olmalı.`,
+      content: `Oyuncunun durumu:\n${JSON.stringify(state)}\n\nBir sonraki sahneyi yaz. Eğer "yeni_bolum_basladi" doğruysa yeni bir bölümün ilk sahnesidir: "bolum.ozet" bilgisini oyuncuya anlatma, yalnızca o havayı taşıyan sıcak, merak uyandıran bir açılış yaz. Eğer "yeni_gece_basladi" doğruysa oyuncu uyuyup yeni geceye uyandı: sahneyi kısa bir uyanışla aç (Nene Selvi feneri yağla dolduruyor, sıcak bir ayrıntı), sonra daha önce bulunan ipuçlarını hatırlayarak hikâyeyi kaldığı yerden sürdür. Eğer "korkudan_yurda_dondu" doğruysa oyuncu çok ürkerek yurda koştu: sahneyi Nene Selvi'nin onu sakinleştirmesiyle aç (sıcak bir içecek, battaniye), sonra hikâyeyi kaldığı yerden sürdür. "tamamlanan_duraklar" listesindeki olaylar çoktan yaşandı: onları yeniden yaşatma ve baştan anlatma, yalnızca gerekirse geçmişte kalmış bir ayrıntı olarak an. Eğer "atlanan_durak" doluysa o durağın olayı ekranda anlatılmadan çözülmüş sayılır: sahneyi o olayın nasıl çözüldüğünü bir ya da iki cümleyle özetleyerek aç, sonra yeni durağın hikâyesine geç. Aksi durumda önce oyuncunun son seçimine DOĞRUDAN karşılık ver: seçtiği eylem sahnede gerçekleşsin, sorduğu soru cevaplansın, konuştuğu kişi cevap versin. "henuz_sahneye_girmeyecek_karakterler" listesindeki karakterleri sahneye sokma, yalnızca belirsiz bir iz (uzaktan ses, gölge) göstermen yeterli. "guven_puanlari" yüksek olan karakterler oyuncuya daha sıcak ve yardımsever davransın, hiç puanı olmayanlar mesafeli ama kibar olsun. "bilinen_npcler" listesindeki karakterleri tutarlı kullan. Anlatım ikinci tekil şahıs ve şimdiki zaman olsun (“kapıyı itiyorsun”, “Nene Selvi sana bakıyor”). Kısa, sade, doğal ve akıcı Türkçe kullan. Sahnede en fazla bir benzetme olsun. Hikâyeyi her sahnede gözle görülür biçimde ilerlet: yeni bir bilgi, yeni bir kişi ya da yeni bir yer olsun. Oyuncu bu dönüm noktasında ${steps}. sahnede. Eğer "hedef_donum_noktasi.bulmaca" doluysa bu durak bir bulmaca durağıdır: bulmacayı sahnede ÇÖZDÜRME ve cevabını söyleme; oyuncuyu bulmacanın nesnesine (kap, kilit, boya kutusu) götür ve merak uyandır, bayrak verme. Oyuncu bulmacayı kendi ekranında çözecek. Çıt oyuncunun yan karakteri ve yol arkadaşıdır (yalnızca 2. bölümde ya da onu tanıdıysa), ara sıra kısa cümlelerle sahnede yer alabilir. Bitiş bayrağı yalnızca oyuncu hedef dönüm noktasının mekânındaysa ve o durakta en az 2. sahnedeyse geçerlidir. Oyuncu "hedef_donum_noktasi.mekan" dışında bir yerdeyse seçeneklerden birini ("to" ile) hedef mekâna götüren bir yol yap. 3. sahneden itibaren, oyuncu hedef mekândayken, bitiş bayrağını seçeneklerden en az birine MUTLAKA ver ve hikâyeyi hedefe ulaştır.\nGerilim ve gizem ekle: sahneyi açık kalan bir soru ya da küçük bir ürperti (tuhaf ses, kıpırdayan gölge, kaybolan eşya) ile bitir. Seçenekler gerçek ikilem olsun (biri merak, biri temkin; her birinin bedeli ve getirisi olsun, hiçbiri bariz olmasın). Ürpertici bir şeye yaklaşan ya da dokunan seçeneğe "fear": 1 ver, rahatlatan seçeneğe (dost bir yüz, ışık, espri) -1. Seçeneklerin en az birine "fear": 1 ver. Dehşet, kan ve gerçek tehlike olmasın, ürperti hep güvenli ve biraz komik kalsın.\nBir karakterle konuşmayı, ona yardım etmeyi ya da dürüst davranmayı içeren seçeneğe "npc" (karakterin adı) ve "trust": 1 ekle; kaba ya da yalancı davranış için -1.\nYalnızca tek bir JSON nesnesi döndür, öncesine ve sonrasına hiçbir şey yazma. Metin içindeki konuşmalarda düz çift tırnak yerine “ ” kullan. Paragraflar arasına \\n\\n koy. "fear" değeri -1, 0 ya da 1 sayısı olmalı.`,
     }],
   });
   const block = msg.content.find((b) => b.type === 'text');
@@ -278,6 +288,7 @@ export async function POST(req: NextRequest) {
   const choiceId: string | undefined = typeof body.choiceId === 'string' ? body.choiceId : undefined;
   const travelTo: string | undefined = typeof body.travel === 'string' ? body.travel : undefined;
   const useItem: string | undefined = typeof body.useItem === 'string' ? body.useItem : undefined;
+  const citAction: string | undefined = typeof body.cit === 'string' ? body.cit : undefined;
 
   let { location, node, fear, lantern } = ch as { location: string; node: number; fear: number; lantern: number };
   let chapter: number = ch.chapter ?? 1;
@@ -303,6 +314,24 @@ export async function POST(req: NextRequest) {
     notices.push(def.use.text);
     const { data: upd } = await admin.from('characters').update({ fear, lantern, items }).eq('id', ch.id).select().single();
     await logChoice(ch, 'use', useItem, `Kullandı: ${def.label}`, fear, lantern);
+    return respond(upd ?? ch, ch.current);
+  }
+
+  // 1b) Çıt'ı fener yağı bulmaya gönder. Sahne değişmez, AI çağrılmaz.
+  if (citAction === 'send') {
+    const nightsNow = meta.nights ?? 0;
+    if (!ch.current || ch.current.night || ch.current.finished) {
+      return NextResponse.json({ error: 'Çıt şimdi yola çıkamaz' }, { status: 400 });
+    }
+    if (!citAvailable(chapter, flags, trust)) return NextResponse.json({ error: 'Çıt henüz seninle değil' }, { status: 400 });
+    if (meta.citReturnAt) return NextResponse.json({ error: 'Çıt zaten yolda' }, { status: 400 });
+    if (meta.citNight === nightsNow) return NextResponse.json({ error: 'Çıt bu gece zaten bir görev yaptı, dinlenmesi lazım' }, { status: 400 });
+    if (lantern > 9 || lantern < 1) return NextResponse.json({ error: 'Fener yağın hâlâ dolu ya da bitmiş. Çıt’ı yağ azalınca gönder' }, { status: 400 });
+    meta.citReturnAt = (meta.moves ?? 0) + CIT_MISSION_MOVES;
+    meta.citNight = nightsNow;
+    notices.push(`🤖 Çıt tıkırdayarak yağ aramaya çıktı. ${CIT_MISSION_MOVES} hamle sonra dönecek.`);
+    const { data: upd } = await admin.from('characters').update({ meta }).eq('id', ch.id).select().single();
+    await logChoice(ch, 'cit', 'send', 'Çıt’ı yağ bulmaya gönderdi', fear, lantern);
     return respond(upd ?? ch, ch.current);
   }
 
@@ -334,6 +363,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Burası henüz sisin içinde, haritada açılmadı' }, { status: 400 });
     }
     picked = { id: 'travel', label: `${LOCATION_NAMES[travelTo]} yönüne yürümeye karar verdim`, to: travelTo };
+  } else if (choiceId === 'puzzle') {
+    // Bulmaca ekranı istemcide açılır, sahne değişmez.
+    if (!ch.current) return NextResponse.json({ error: 'Sahne yok' }, { status: 400 });
+    return respond(ch, ch.current);
+  } else if (choiceId === 'puzzle_done') {
+    const c0 = nodes[node - 1];
+    if (!c0?.puzzle || meta.puzzleOk !== `${chapter}:${node}` || !ch.current) {
+      return NextResponse.json({ error: 'Bulmaca henüz çözülmedi' }, { status: 400 });
+    }
+    picked = { id: 'puzzle_done', label: `Bulmacayı çözdüm: ${PUZZLES[c0.puzzle]?.title ?? 'bulmaca'}`, fear: -1 };
   } else if (choiceId) {
     picked = ch.current?.choices?.find((c: StoredChoice) => c.id === choiceId);
     if (!picked) return NextResponse.json({ error: 'Geçersiz seçim' }, { status: 400 });
@@ -361,6 +400,8 @@ export async function POST(req: NextRequest) {
     // Hikâye eşyaları gider, hatıra eşyaları ve güven puanları kalır.
     for (let i = items.length - 1; i >= 0; i--) if (!isTradable(items[i])) items.splice(i, 1);
     meta.skillAt = '';
+    meta.citReturnAt = 0;
+    meta.puzzleOk = '';
     isNew = true;
     chosenLabel = undefined;
     picked = undefined;
@@ -399,9 +440,16 @@ export async function POST(req: NextRequest) {
     meta.moves = (meta.moves ?? 0) + 1;
     // Çevik: her 3. hamlede fener yağı harcanmaz.
     const free = ch.skill === 'cevik' && meta.moves % 3 === 0;
-    if (picked.id !== 'rest') {
+    if (picked.id !== 'rest' && picked.id !== 'puzzle_done') {
       if (free) notices.push('⚡ Çevik: Bu hamle fener yağı harcamadı.');
       else lantern = Math.max(0, lantern - 1);
+    }
+    // Çıt görevden döndü mü?
+    if (meta.citReturnAt && meta.moves >= meta.citReturnAt) {
+      lantern = Math.min(14, lantern + CIT_OIL);
+      meta.citReturnAt = 0;
+      notices.push(`🤖 Çıt döndü ve bir kutu fener yağı buldu! (+${CIT_OIL} yağ)`);
+      addTrust(trust, items, 'Çıt', 1, notices);
     }
     fear = clamp(fear + (picked.fear ?? 0), 0, 4);
     if (picked.give && !items.includes(picked.give) && items.length < MAX_ITEMS) {
@@ -414,11 +462,17 @@ export async function POST(req: NextRequest) {
     // Bayrak yalnızca durağın kendi mekânında ve en az 2. sahneden itibaren kabul edilir:
     // hiçbir durak, oraya uğramadan ya da tek sahnede geçilemez.
     const atStop = Boolean(cur) && ch.location === cur.location && (ch.current?.steps ?? 1) >= 2;
-    if (picked.flag && picked.flag === cur?.flag && atStop) flags[picked.flag] = true;
+    const isPuzzle = Boolean(cur?.puzzle);
+    if (picked.flag && picked.flag === cur?.flag && atStop && !isPuzzle) flags[picked.flag] = true;
+    // Bulmaca duraklarında bayrak yalnızca bulmaca çözülünce alınır.
+    if (picked.id === 'puzzle_done' && cur && isPuzzle && atStop && meta.puzzleOk === `${chapter}:${cur.n}`) {
+      flags[cur.flag] = true;
+      meta.puzzleOk = '';
+    }
     // Sunucunun eklediği "görevi tamamla" seçeneği (AI bayrağı vermezse takılmamak için).
-    if (picked.id === 'goal' && cur && atStop) { flags[cur.flag] = true; skipped = cur; }
+    if (picked.id === 'goal' && cur && atStop && !isPuzzle) { flags[cur.flag] = true; skipped = cur; }
     logEntry = {
-      kind: travelTo ? 'travel' : picked.id === 'rest' ? 'rest' : picked.id === 'goal' ? 'goal' : 'choice',
+      kind: travelTo ? 'travel' : picked.id === 'rest' ? 'rest' : picked.id === 'goal' ? 'goal' : picked.id === 'puzzle_done' ? 'puzzle' : 'choice',
       id: picked.id,
       label: picked.label,
     };
@@ -465,6 +519,14 @@ export async function POST(req: NextRequest) {
     location = 'yurt';
     lantern = 14;
     meta.nights = (meta.nights ?? 0) + 1;
+    // Yolda olan Çıt sabah bir yağ şişesiyle döner.
+    if (meta.citReturnAt) {
+      meta.citReturnAt = 0;
+      if (!items.includes('yag_sisesi') && items.length < MAX_ITEMS) {
+        items.push('yag_sisesi');
+        notices.push('🤖 Çıt sabah döndü ve yanında bir fener yağı şişesi getirdi.');
+      }
+    }
     // Nene Selvi yastığın yanına bir kurabiye bırakır.
     if (!items.includes('kurabiye') && items.length < MAX_ITEMS) {
       items.push('kurabiye');
@@ -501,8 +563,12 @@ export async function POST(req: NextRequest) {
   }
   // Takılma önlemi: durağın mekânında 6 sahne geçtiyse görevi tamamlama seçeneği çıkar.
   const stop = nodes[node - 1];
-  if (!isNight && !finished && stop && !flags[stop.flag] && location === stop.location && steps >= 6) {
-    storedChoices.push({ id: 'goal', label: `✔️ Bu durağın işini tamamla (${stop.title})`, flag: stop.flag });
+  if (!isNight && !finished && stop && !flags[stop.flag] && location === stop.location) {
+    if (stop.puzzle && steps >= 2) {
+      storedChoices.push({ id: 'puzzle', label: `🧩 Bulmacayı çöz: ${PUZZLES[stop.puzzle]?.title ?? 'Bulmaca'}` });
+    } else if (!stop.puzzle && steps >= 6) {
+      storedChoices.push({ id: 'goal', label: `✔️ Bu durağın işini tamamla (${stop.title})`, flag: stop.flag });
+    }
   }
   const shown: StoredScene = { text: scene.text, choices: storedChoices };
 
@@ -527,12 +593,26 @@ function toPublic(c: any) {
   const target = nodes[c.node - 1];
   const locked = Boolean(c.current?.night || c.current?.finished);
   const flags = c.flags ?? {};
-  const pieceFlags = chapter === 1 ? ['pasli_anahtar', 'parca_2', 'gecit_acik'] : ['c2_bakir', 'c2_gumus', 'c2_gri'];
+  const pieceFlags = chapter === 1 ? ['pasli_anahtar', 'parca_2', 'gecit_acik'] : ['c2_bakir', 'c2_gumus', 'c2_bronz'];
   const trust: Record<string, number> = c.trust ?? {};
   return {
     id: c.id, name: c.name, skill: c.skill, location: c.location, node: c.node,
     fear: c.fear, lantern: c.lantern, items: c.items,
     chapter, chapterTitle: CHAPTERS[chapter]?.title ?? '',
+    cit: (() => {
+      const m = c.meta ?? {};
+      const nightsNow = m.nights ?? 0;
+      const avail = citAvailable(chapter, flags, trust);
+      const away = Boolean(m.citReturnAt);
+      return {
+        available: avail,
+        away,
+        movesLeft: away ? Math.max(0, (m.citReturnAt ?? 0) - (m.moves ?? 0)) : 0,
+        rested: !away && m.citNight === nightsNow,
+        canSend: avail && !away && m.citNight !== nightsNow && c.lantern <= 9 && c.lantern >= 1 && !locked,
+        trust: trust['Çıt'] ?? 0,
+      };
+    })(),
     friends: Object.entries(trust).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([name, value]) => ({ name, value })),
     map: {
       unlocked: LOCATION_CODES.filter((l) => isUnlocked(l, chapter, c.node)),
