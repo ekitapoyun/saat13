@@ -521,7 +521,7 @@ function PuzzlePanel({ token, onClose, onSolved }: { token: string; onClose: () 
           {def.type === 'order' && (
             <>
               <ul className="small" style={{ paddingLeft: 18 }}>{def.clues.map((c) => <li key={c}>{c}</li>)}</ul>
-              <p className="small">Halkaya dokun, soldan sağa sıraya girsin. Yerleştirdiğine tekrar dokunursan geri alınır.</p>
+              <p className="small">Birine dokun, soldan sağa sıraya girsin. Yerleştirdiğine tekrar dokunursan geri alınır.</p>
               <div className="row">
                 {def.items.map((it) => (
                   <button key={it.id} disabled={order.includes(it.id)} onClick={() => { setOrder((o) => [...o, it.id]); setFeedback(null); }}>
