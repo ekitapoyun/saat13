@@ -116,61 +116,150 @@ export default function Home() {
 }
 
 function Login() {
+  const [mode, setMode] = useState<'giris' | 'kayit'>('giris');
   const [email, setEmail] = useState('');
   // Varsayılan şifre hazır gelir. İstenirse değiştirilebilir.
   const [password, setPassword] = useState('11111111');
   const [err, setErr] = useState('');
   const [working, setWorking] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
-  async function enter() {
+  function switchMode(m: 'giris' | 'kayit') { setMode(m); setErr(''); }
+
+  async function submit() {
     setErr('');
     setWorking(true);
     const mail = email.trim().toLowerCase();
-    // Önce giriş dene. Hesap yoksa aynı bilgilerle otomatik oluştur.
-    const first = await supabase.auth.signInWithPassword({ email: mail, password });
-    if (!first.error) { setWorking(false); return; }
-
-    const m = (first.error.message || '').toLowerCase();
-    if (!m.includes('invalid login credentials')) {
-      setErr('Giriş yapılamadı: ' + first.error.message);
-      setWorking(false);
-      return;
-    }
-    const up = await supabase.auth.signUp({ email: mail, password });
-    if (up.error) {
-      const um = (up.error.message || '').toLowerCase();
-      if (up.error.status === 429 || um.includes('rate limit')) {
-        setErr('Kısa sürede çok fazla deneme yapıldı. Biraz bekleyip tekrar dene.');
-      } else if (um.includes('already')) {
-        setErr('Bu e-posta zaten kayıtlı ama şifre yanlış. Şifreyi kontrol et.');
-      } else {
-        setErr('Hesap oluşturulamadı: ' + up.error.message);
+    if (mode === 'giris') {
+      const { error } = await supabase.auth.signInWithPassword({ email: mail, password });
+      if (error) {
+        const m = (error.message || '').toLowerCase();
+        if (m.includes('invalid login credentials')) setErr('E-posta ya da şifre yanlış. Hesabın yoksa “Kayıt ol” sekmesine geç.');
+        else if (error.status === 429 || m.includes('rate limit')) setErr('Kısa sürede çok fazla deneme yapıldı. Biraz bekleyip tekrar dene.');
+        else if (m.includes('not confirmed')) setErr('Bu hesap henüz doğrulanmamış. Yöneticiye haber ver.');
+        else setErr('Giriş yapılamadı: ' + error.message);
       }
-    } else if (!up.data.session) {
-      // E-posta doğrulaması açık olduğunda ya da e-posta başka bir şifreyle kayıtlıyken buraya düşer.
-      setErr('Bu e-posta başka bir şifreyle kayıtlı olabilir ya da hesap doğrulaması bekliyor. Şifreyi kontrol et.');
+    } else {
+      const { data, error } = await supabase.auth.signUp({ email: mail, password });
+      if (error) {
+        const m = (error.message || '').toLowerCase();
+        if (m.includes('already')) setErr('Bu e-posta zaten kayıtlı. “Giriş yap” sekmesine geç.');
+        else if (error.status === 429 || m.includes('rate limit')) setErr('Kısa sürede çok fazla deneme yapıldı. Biraz bekleyip tekrar dene.');
+        else if (m.includes('password')) setErr('Şifre en az 6 karakter olmalı.');
+        else setErr('Kayıt olunamadı: ' + error.message);
+      } else if (!data.session) {
+        // E-posta zaten kayıtlıysa ya da doğrulama açıksa oturum açılmaz.
+        setErr('Bu e-posta zaten kayıtlı olabilir. “Giriş yap” sekmesini dene.');
+      }
     }
     setWorking(false);
   }
+
+  const tab = (m: 'giris' | 'kayit') => ({
+    onClick: () => switchMode(m),
+    'aria-pressed': mode === m,
+    style: mode === m ? { borderColor: 'var(--brass)', flex: 1 } : { flex: 1 },
+  });
 
   return (
     <main>
       <div className="panel">
         <h1>13. Vuruş</h1>
-        <p>Sisli Liman’da her gece saat on üç kez çalar. Hikâyeye başlamak için e-posta ve şifreni gir. Hesabın yoksa otomatik oluşturulur.</p>
+        <p>Sisli Liman’da her gece saat on üç kez çalar.</p>
+        <div className="row" style={{ marginTop: 4 }}>
+          <button {...tab('giris')}>Giriş yap</button>
+          <button {...tab('kayit')}>Kayıt ol</button>
+        </div>
+        <p className="small" style={{ marginTop: 12 }}>
+          {mode === 'giris' ? 'Daha önce kayıt olduysan e-posta ve şifreni gir.' : 'İlk kez mi geliyorsun? E-posta ve bir şifre seç. Şifreyi unutma!'}
+        </p>
         <label htmlFor="email">E-posta</label>
         <input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         <label htmlFor="pw">Şifre</label>
-        <input id="pw" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <input id="pw" type="password" autoComplete={mode === 'giris' ? 'current-password' : 'new-password'}
+          value={password} onChange={(e) => setPassword(e.target.value)} />
         <div className="choices">
-          <button onClick={enter} disabled={working || !email.includes('@') || password.length < 6}>
-            {working ? 'Giriliyor…' : 'Giriş yap'}
+          <button onClick={submit} disabled={working || !email.includes('@') || password.length < 6}>
+            {working ? 'Bekle…' : mode === 'giris' ? 'Giriş yap' : 'Kayıt ol ve başla'}
           </button>
         </div>
         {err && <p role="alert">{err}</p>}
         <p className="small">Çocuklar için: e-posta adresi ebeveynin adresi olmalı.</p>
+        <div className="row"><button onClick={() => setShowHelp((v) => !v)} aria-expanded={showHelp}>❓ Oyun nasıl oynanır?</button></div>
+        {showHelp && <HelpPanel />}
       </div>
     </main>
+  );
+}
+
+// Yardım menüsü: kısa, çocuklara göre yazılmış açıklamalar. Sunucudaki gerçek kurallarla aynı tutulmalı.
+const HELP: { q: string; a: string[] }[] = [
+  { q: '🎮 Oyun nasıl oynanır?', a: [
+    'Hikâyeyi okursun, altındaki seçeneklerden birine dokunursun. Hikâye seçtiğin şeye göre devam eder.',
+    'Hikâyede ilerledikçe yeni yerler, yeni kişiler ve yeni ipuçları bulursun. Amacın Sisli Liman’ın sırrını çözmek.',
+    'Yanlış seçim diye bir şey yok. Bazen bir kişi sana ipucu verir, sen tekrar denersin.',
+  ] },
+  { q: '🏮 Fener yağı neden azalır?', a: [
+    'Fener yağı 14 ile başlar. Her seçim ya da haritadan yürüyüş 1 yağ harcar.',
+    'Yağ 4’e ve 2’ye inince fenerin alevi küçülür ve biraz ürkersin (korku artar).',
+    'Yağ bitince fener söner. Nene Selvi seni yurda götürür, uyursun ve yeni bir geceye uyanırsın. Yağın tekrar 14 olur ve çantana bir kurabiye gelir.',
+    'Yağı artırmanın yolları: Fener yağı şişesini kullan (+3 yağ), Tamirci yeteneğiyle bir şişe yap ya da korkup yurda koşunca +4 yağ kazan.',
+    'Çevik yeteneği olanlar her 3. hamlede yağ harcamaz.',
+  ] },
+  { q: '😨 Korku nedir, nasıl azalır?', a: [
+    'Korku 0 ile 4 arasında bir ölçek. Ürpertici şeylere yaklaşınca artar. Hikâye hep güvenlidir, hiçbir şey sana zarar vermez.',
+    'Korkuyu artıranlar: ürpertici bir şeye yaklaşmak ya da dokunmak, Unutulmuş Mezarlık, Fener Kayalığı, Mekanizma Odası ve Usta’nın Atölyesi’ne girmek, fener yağının azalması.',
+    'Korkuyu azaltanlar: dost bir yüzle konuşmak, ışık ve espri içeren seçenekler, Nene Selvi’nin kurabiyesini yemek (−1), Konuşkan yeteneğiyle sohbet etmek (−1) ve ortak sahneyi bitirmek (−1).',
+    'Korku 4 olursa ceza yok: yurda dönersin, Nene Selvi seni sakinleştirir, korkun sıfırlanır ve 4 yağ kazanırsın.',
+  ] },
+  { q: '👥 Diğer oyuncuları nasıl görürüm?', a: [
+    'Aynı yerde olan oyuncuları sahnenin altında görürsün: “Ali burada.” Birini görmek için aynı yerde olmanız gerekir.',
+    '“👥 Çevrimiçi” düğmesi şu an oyunda olan herkesi ve hangi yerde olduklarını gösterir. Haritada da kaç kişi olduğunu görürsün.',
+    'Yalnızca takma ad görünür. Gerçek ad, e-posta ya da başka bilgi görünmez. Serbest yazı yoktur, sadece hazır mesajlar: 👋 Selam, 🤝 Takas yapalım mı?, ❓ Yardım edebilir misin?, 🔦 Beni takip et.',
+    'Aynı yerdeki biriyle 🧩 “hikâyeni birleştir” diyerek birlikte kısa bir maceraya çıkabilirsin. İkiniz de oy verirsiniz.',
+  ] },
+  { q: '🗺️ Harita nasıl çalışır?', a: [
+    '“Haritayı aç” de. Bulunduğun yer dolu, gidebileceğin yerler → ile işaretli. Dokun, “Buraya yürü” de.',
+    '★ hikâyenin seni beklediği yer. ? işaretli yerler henüz sisin içinde, hikâyede ilerledikçe açılır.',
+    'Haritadan sadece komşu yerlere gidebilirsin. Yürümek 1 fener yağı harcar.',
+  ] },
+  { q: '✨ Yetenekler ne işe yarar?', a: [
+    '🔍 Gözlemci: hikâye durağında bir kez saklı bir ipucu bulur.',
+    '🗣️ Konuşkan: karşısındakiyle içten sohbet eder. Korkun azalır ve o kişi sana daha çok güvenir.',
+    '⚡ Çevik: her 3. hamlede fener yağı harcamaz.',
+    '🔧 Tamirci: mekanizmaları kurcalayıp ipucu bulur. Başka yerde malzemelerden fener yağı şişesi yapar (gece başına bir).',
+    'Yetenek seçeneği, sahnenin altında kesik çizgili düğme olarak çıkar.',
+  ] },
+  { q: '🎒 Eşyalar ve takas', a: [
+    'Çantanda en fazla 8 eşya taşıyabilirsin. 🍪 Kurabiye ve 🫙 yağ şişesi gibi eşyalara “Kullan” diyerek kullanırsın.',
+    'Anahtar, dişli, harita parçası ve günlük gibi hikâye eşyaları takas edilemez, onları hep sen saklarsın.',
+    'Küçük hatıraları (deniz camı, kuzgun tüyü, bronz düğme, mektup, kurabiye, yağ şişesi) aynı yerdeki oyuncuyla takas edebilirsin. “🤝 takas” de, eşyayı seç. Karşı taraf kabul ederse takas olur, 10 dakika içinde cevap vermezse teklif silinir.',
+  ] },
+  { q: '💛 Dostların ve güven puanı', a: [
+    'Karakterlere nazik, dürüst ve yardımsever davranırsan sana güvenirler. Güven puanı 0 ile 5 arasındadır.',
+    'Güveni 3 olan bir karakter sana küçük bir hediye verir ve sana daha açık davranır. Dostların listesi çantanın altında durur.',
+    'Hikâyeyi yeniden oynasan bile dostların seni hatırlar.',
+  ] },
+  { q: '📖 Bölümler ve hikâyenin sonu', a: [
+    'Hikâye bölümlere ayrılır. Bir bölüm bitince “2. Bölüm” ya da “yeniden oyna” seçeneği çıkar.',
+    'Yeniden oynarken hikâye eşyaların gider, ama hatıralarını ve dostlarını korursun.',
+  ] },
+  { q: '🛡️ Güvenlik', a: [
+    'Takma ad kullan, gerçek adını, okulunu ya da adresini yazma. Zaten oyun senden bunları istemez.',
+    'Oyunda bir şey seni rahatsız ederse ya da korkutursa ekranı kapat ve güvendiğin bir büyüğüne söyle.',
+  ] },
+];
+
+function HelpPanel() {
+  return (
+    <div className="here" style={{ marginTop: 14 }}>
+      {HELP.map((h) => (
+        <details key={h.q} style={{ marginBottom: 8 }}>
+          <summary style={{ cursor: 'pointer', padding: '6px 0' }}><b>{h.q}</b></summary>
+          {h.a.map((line, i) => <p key={i} className="small" style={{ margin: '4px 0 4px 14px' }}>{line}</p>)}
+        </details>
+      ))}
+    </div>
   );
 }
 
@@ -240,7 +329,7 @@ type TradeIn = { id: string; fromName: string; item: string };
 type TradeOut = { id: string; toName: string; item: string };
 
 // Çizili harita: komşu yerlere dokunup yürüyebilirsin. Sisteki yerler henüz açılmadı.
-function MapView({ character, busy, onTravel }: { character: Character; busy: boolean; onTravel: (to: string) => void }) {
+function MapView({ character, busy, counts, onTravel }: { character: Character; busy: boolean; counts: Record<string, number>; onTravel: (to: string) => void }) {
   const m = character.map;
   const [sel, setSel] = useState<string | null>(null);
   const unlocked = new Set(m.unlocked);
@@ -283,12 +372,15 @@ function MapView({ character, busy, onTravel }: { character: Character; busy: bo
                   {LOCATION_NAMES[loc]}
                 </text>
               )}
+              {open && (counts[loc] ?? 0) > 0 && (
+                <text x={p.x - 30} y={p.y - 14} fontSize="12" style={{ fill: 'var(--brass)' }}>👥{counts[loc]}</text>
+              )}
             </g>
           );
         })}
       </svg>
       <p className="small" style={{ margin: '8px 0 0' }}>
-        ● buradasın · → gidebileceğin yer · ★ hikâyenin seni beklediği yer · ? sis içinde. {m.pieces.label}: {m.pieces.have}/{m.pieces.total}
+        ● buradasın · → gidebileceğin yer · ★ hikâyenin seni beklediği yer · 👥 oyuncular · ? sis içinde. {m.pieces.label}: {m.pieces.have}/{m.pieces.total}
       </p>
       {sel && (
         <div className="here">
@@ -317,6 +409,11 @@ function Game(props: {
 }) {
   const { character, scene, busy, error, notices, token, onChoose, onTravel, onUse, onRefresh } = props;
   const [showMap, setShowMap] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [showOnline, setShowOnline] = useState(false);
+  const [online, setOnline] = useState<{ id: string; name: string; location: string }[]>([]);
+  const onlineCh = useRef<RealtimeChannel | null>(null);
+  const locRef = useRef(character.location);
   const [incoming, setIncoming] = useState<TradeIn[]>([]);
   const [outgoing, setOutgoing] = useState<TradeOut[]>([]);
   const [tradeWith, setTradeWith] = useState<Here | null>(null);
@@ -414,6 +511,36 @@ function Game(props: {
 
   const myTradables = character.items.filter(isTradable);
 
+  // Çevrimiçi oyuncular: tüm oyun için tek bir presence kanalı. Yalnızca takma ad ve mekân paylaşılır.
+  useEffect(() => {
+    const ch = supabase.channel('online', { config: { presence: { key: character.id } } });
+    ch.on('presence', { event: 'sync' }, () => {
+      const st = ch.presenceState<{ name: string; location: string }>();
+      setOnline(
+        Object.entries(st)
+          .filter(([id]) => id !== character.id)
+          .map(([id, metas]) => ({ id, name: metas[0]?.name ?? '?', location: metas[0]?.location ?? '' }))
+      );
+    });
+    ch.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') await ch.track({ name: character.name, location: locRef.current });
+    });
+    onlineCh.current = ch;
+    return () => { supabase.removeChannel(ch); onlineCh.current = null; setOnline([]); };
+  }, [character.id, character.name]);
+
+  // Mekân değişince konumu kanalda güncelle.
+  useEffect(() => {
+    locRef.current = character.location;
+    const ch = onlineCh.current;
+    if (ch && (ch as unknown as { state?: string }).state === 'joined') {
+      ch.track({ name: character.name, location: character.location });
+    }
+  }, [character.location, character.name]);
+
+  const counts: Record<string, number> = {};
+  online.forEach((o) => { counts[o.location] = (counts[o.location] ?? 0) + 1; });
+
   function send(preset: string) {
     channel.current?.send({ type: 'broadcast', event: 'quick', payload: { from: character.name, preset } });
     setMessages((m) => [...m.slice(-4), { from: 'Sen', text: QUICK[preset], at: Date.now() }]);
@@ -465,9 +592,38 @@ function Game(props: {
         <button onClick={() => setShowMap((v) => !v)} aria-expanded={showMap}>
           🗺️ {showMap ? 'Haritayı kapat' : 'Haritayı aç'}
         </button>
+        <button onClick={() => setShowOnline((v) => !v)} aria-expanded={showOnline}>
+          👥 Çevrimiçi ({online.length + 1})
+        </button>
+        <button onClick={() => setShowHelp((v) => !v)} aria-expanded={showHelp}>
+          ❓ Yardım
+        </button>
       </div>
+      {showOnline && (
+        <div className="panel" style={{ marginBottom: 16, padding: '12px 16px' }}>
+          <b>Şu an oyunda</b>
+          <div className="small">Sen: {character.name} · {LOCATION_NAMES[character.location]}</div>
+          {online.length === 0 ? (
+            <p className="small" style={{ margin: '6px 0 0' }}>Şimdilik başka oyuncu yok. Biraz sonra tekrar bak.</p>
+          ) : (
+            online.map((o) => (
+              <div key={o.id} className="small">
+                {o.name} · {LOCATION_NAMES[o.location] ?? 'Sisli Liman'}
+                {o.location === character.location && ' · seninle aynı yerde 👋'}
+              </div>
+            ))
+          )}
+          <p className="small" style={{ margin: '8px 0 0' }}>Birini görmek ve onunla konuşmak için aynı yerde olmanız gerekir. Haritada hangi yerde kaç kişi olduğu 👥 ile görünür.</p>
+        </div>
+      )}
+      {showHelp && (
+        <div className="panel" style={{ marginBottom: 16, padding: '12px 16px' }}>
+          <b>Yardım</b>
+          <HelpPanel />
+        </div>
+      )}
       {showMap && !jointId && (
-        <MapView character={character} busy={busy} onTravel={(to) => { setShowMap(false); onTravel(to); }} />
+        <MapView character={character} busy={busy} counts={counts} onTravel={(to) => { setShowMap(false); onTravel(to); }} />
       )}
 
       <div className="panel" style={{ marginBottom: 16, padding: '12px 16px' }}>
