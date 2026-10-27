@@ -25,7 +25,7 @@ function checkJugs(answer: any): CheckResult {
 const ORDER_ANSWERS: Record<string, string[]> = {
   halka: ['mavi', 'yesil', 'kirmizi', 'sari'],
   kabuk: ['mavi', 'kum', 'inci', 'mercan'],
-  disli: ['minik', 'kucuk', 'orta', 'buyuk'],
+  disli: ['pirinc', 'bakir', 'gumus', 'demir'],
 };
 const NUMBER_ANSWERS: Record<string, number[]> = {
   nota: [16, 25, 17],
@@ -123,10 +123,10 @@ HINTS.gelgit = [
   'Üçüncü dizide son artış 4 idi, sıradaki 5. Sonuç 10 + 5.',
 ];
 HINTS.disli = [
-  'Önce yan yana duranları bul: orta dişli büyük dişlinin hemen solunda.',
-  'Küçük dişli ne en solda ne en sağda: ortadaki iki yerden birinde olmalı.',
-  'Orta–büyük ikilisi sağda durursa küçük dişli için hangi yer kalır?',
-  'Minik dişli en solda, ardından küçük, orta ve büyük dişli sırayla gelir.',
+  'Önce yan yana duranları bul: gümüş dişli, demir dişlinin hemen solunda.',
+  'Bakır dişli ne en solda ne en sağda: ortadaki iki yerden birinde olmalı.',
+  'Gümüş–demir ikilisi sağda durursa bakır dişli için hangi yer kalır?',
+  'Pirinç dişli en solda, hemen yanında bakır gelir; sağdaki iki yeri gümüş ve demir alır.',
 ];
 
 export const SOLVED_TEXT: Record<string, string> = {
