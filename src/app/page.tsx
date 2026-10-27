@@ -198,6 +198,7 @@ const HELP: { q: string; a: string[] }[] = [
     'Hikâyeyi okursun, altındaki seçeneklerden birine dokunursun. Hikâye seçtiğin şeye göre devam eder.',
     'Hikâyede ilerledikçe yeni yerler, yeni kişiler ve yeni ipuçları bulursun. Amacın Sisli Liman’ın sırrını çözmek.',
     'Yanlış seçim diye bir şey yok. Bazen bir kişi sana ipucu verir, sen tekrar denersin.',
+    'Hikâye duraklardan oluşur. Her durağın kendi yeri vardır: ★ işaretli yere gidip orada birkaç sahne yaşaman gerekir. Durakları atlayamazsın, sırayla ilerlersin.',
   ] },
   { q: '🏮 Fener yağı neden azalır?', a: [
     'Fener yağı 14 ile başlar. Her seçim ya da haritadan yürüyüş 1 yağ harcar.',
