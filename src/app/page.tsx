@@ -301,6 +301,8 @@ const HELP: { q: string; a: string[] }[] = [
 function SavePanel({ token, onChanged }: { token: string; onChanged: () => void }) {
   const [slots, setSlots] = useState<{ slot: number; label: string | null; at: string | null }[]>([]);
   const [armed, setArmed] = useState<string>('');
+  const [newName, setNewName] = useState('');
+  const [newSkill, setNewSkill] = useState<Skill>('gozlemci');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -368,6 +370,20 @@ function SavePanel({ token, onChanged }: { token: string; onChanged: () => void 
           {armed === 'reset' ? 'Emin misin? Evet, baştan başla' : '🔄 Baştan başla'}
         </button>
         {armed && <button disabled={busy} onClick={() => setArmed('')}>Vazgeç</button>}
+      </div>
+      <hr style={{ opacity: 0.2 }} />
+      <div className="small"><b>Yeni karakterle başla:</b> yeni bir takma ad ve yetenek seç, hikâye baştan başlasın. Kayıt yuvaların kalır.</div>
+      <label htmlFor="newname" className="small">Yeni takma ad (gerçek adını yazma)</label>
+      <input id="newname" value={newName} maxLength={16} onChange={(e) => setNewName(e.target.value)} />
+      <label htmlFor="newskill" className="small">Yeni yetenek</label>
+      <select id="newskill" value={newSkill} onChange={(e) => setNewSkill(e.target.value as Skill)}>
+        {SKILLS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+      </select>
+      <div className="row">
+        <button disabled={busy || newName.trim().length < 2}
+          onClick={() => run('newchar', { action: 'reset', name: newName.trim(), skill: newSkill }, true)}>
+          {armed === 'newchar' ? 'Emin misin? Evet, yeni karakterle başla' : '🧒 Yeni karakterle başla'}
+        </button>
       </div>
       {msg && <p className="small" role="status" style={{ margin: '8px 0 0' }}>{msg}</p>}
     </div>
