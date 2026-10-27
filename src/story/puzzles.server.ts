@@ -22,16 +22,27 @@ function checkJugs(answer: any): CheckResult {
   return a === 4 ? { ok: true } : { ok: false, detail: `Büyük kapta ${a} litre, küçük kapta ${b} litre var.` };
 }
 
-function checkOrder(answer: any): CheckResult {
-  const want = ['mavi', 'yesil', 'kirmizi', 'sari'];
+const ORDER_ANSWERS: Record<string, string[]> = {
+  halka: ['mavi', 'yesil', 'kirmizi', 'sari'],
+  kabuk: ['mavi', 'kum', 'inci', 'mercan'],
+  disli: ['minik', 'kucuk', 'orta', 'buyuk'],
+};
+const NUMBER_ANSWERS: Record<string, number[]> = {
+  nota: [16, 25, 17],
+  raf: [10, 16, 60],
+  gelgit: [48, 18, 15],
+};
+
+function checkOrder(id: string, answer: any): CheckResult {
+  const want = ORDER_ANSWERS[id];
   const got: unknown = answer?.order;
   if (!Array.isArray(got) || got.length !== 4) return { ok: false, detail: 'Dört halkayı da yerleştir.' };
   const right = want.filter((w, i) => got[i] === w).length;
   return right === 4 ? { ok: true } : { ok: false, detail: `${right}/4 halka doğru yerde.` };
 }
 
-function checkNumbers(answer: any): CheckResult {
-  const want = [16, 25, 17];
+function checkNumbers(id: string, answer: any): CheckResult {
+  const want = NUMBER_ANSWERS[id];
   const got: unknown = answer?.values;
   if (!Array.isArray(got) || got.length !== 3) return { ok: false, detail: 'Üç diziyi de doldur.' };
   const right = want.filter((w, i) => Number(got[i]) === w).length;
@@ -58,8 +69,8 @@ function checkColors(answer: any): CheckResult {
 export function checkPuzzle(id: string, answer: unknown): CheckResult {
   switch (id) {
     case 'yag': return checkJugs(answer);
-    case 'halka': return checkOrder(answer);
-    case 'nota': return checkNumbers(answer);
+    case 'halka': case 'kabuk': case 'disli': return checkOrder(id, answer);
+    case 'nota': case 'raf': case 'gelgit': return checkNumbers(id, answer);
     case 'boya': return checkColors(answer);
     default: return { ok: false, detail: 'Bilinmeyen bulmaca.' };
   }
@@ -93,9 +104,38 @@ export const HINTS: Record<string, string[]> = {
   ],
 };
 
+HINTS.kabuk = [
+  'Önce kesin olanı yerleştir: mercan kabuğu en sağda.',
+  'İnci kabuğu iki uçta da olamaz. Yani ortadaki iki yerden birinde olmalı.',
+  'Mavi ve kum kabukları yan yana: önce mavi, hemen sağında kum.',
+  'İnci en solda olmadığına göre mavi–kum ikilisi en solda durur. İnci nerede kalır?',
+];
+HINTS.raf = [
+  'Birinci dizide sayılar arasındaki farka bak: 2, 4, 6, 8… Her seferinde ne kadar artıyor?',
+  'İkinci dizide her sayı bir öncekinin iki katı.',
+  'Üçüncü dizi geriye doğru sayıyor: her seferinde 10 azalıyor.',
+  'Cevaplar: ilk dizide +2, ikincide ×2, üçüncüde −10 kuralı var.',
+];
+HINTS.gelgit = [
+  'Birinci dizide her sayı bir öncekinin iki katı: 3, 6, 12…',
+  'İkinci dizi her adımda 3 azalıyor.',
+  'Üçüncü dizide artış gittikçe büyüyor: +2, +3, +4… Sonraki artış kaç?',
+  'Üçüncü dizide son artış 4 idi, sıradaki 5. Sonuç 10 + 5.',
+];
+HINTS.disli = [
+  'Önce yan yana duranları bul: orta dişli büyük dişlinin hemen solunda.',
+  'Küçük dişli ne en solda ne en sağda: ortadaki iki yerden birinde olmalı.',
+  'Orta–büyük ikilisi sağda durursa küçük dişli için hangi yer kalır?',
+  'Minik dişli en solda, ardından küçük, orta ve büyük dişli sırayla gelir.',
+];
+
 export const SOLVED_TEXT: Record<string, string> = {
   yag: 'Tam 4 litre! Madam Tuzlu ellerini çırpıyor: “Hesap bu kadar güzel olur.”',
   halka: 'Halkalar yerine oturuyor ve kilit tık diye açılıyor.',
   nota: 'Üç dizi de doğru! Müzik kutusunun kilidi nazikçe açılıyor.',
   boya: 'Dört renk de hazır! Brasswick sevinçle fırçasını sallıyor.',
+  kabuk: 'Kabuklar yerine oturuyor! Marl kahkahayla haritayı sana uzatıyor.',
+  raf: 'Üç kilit de açılıyor! Raftan eski, tozlu bir günlük kayıyor.',
+  gelgit: 'Çarklar yerine oturuyor. Su çekiliyor ve mağaranın ağzı görünüyor.',
+  disli: 'Dişliler yerine oturuyor ve mekanizma yumuşak bir tıkırtıyla uyanıyor.',
 };
