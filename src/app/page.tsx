@@ -1,10 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { RealtimeChannel, Session } from '@supabase/supabase-js';
 import { supabase, LOCATION_NAMES, type Character, type Scene, type Skill } from '@/lib/supabase';
 import { ITEMS, itemIcon, itemLabel, isTradable } from '@/story/items';
 import { MAP_W, MAP_H, MAP_POS, MAP_EDGES, SECRET_EDGES } from '@/story/map';
+import type { PuzzleDef } from '@/story/puzzles';
 
 const SKILLS: { id: Skill; label: string }[] = [
   { id: 'gozlemci', label: 'Gözlemci: her bölümde bir kez saklı ipucunu bulur' },
@@ -53,7 +54,7 @@ export default function Home() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  const call = useCallback(async (payload: { choiceId?: string; travel?: string; useItem?: string } = {}) => {
+  const call = useCallback(async (payload: { choiceId?: string; travel?: string; useItem?: string; cit?: string } = {}) => {
     if (!session) return;
     setBusy(true);
     setError('');
@@ -106,6 +107,7 @@ export default function Home() {
         onChoose={(id) => call({ choiceId: id })}
         onTravel={(to) => call({ travel: to })}
         onUse={(item) => call({ useItem: item })}
+        onCit={() => call({ cit: 'send' })}
         onRefresh={() => call()}
       />
       <p className="small" style={{ marginTop: 24 }}>
@@ -231,6 +233,18 @@ const HELP: { q: string; a: string[] }[] = [
     '🔧 Tamirci: mekanizmaları kurcalayıp ipucu bulur. Başka yerde malzemelerden fener yağı şişesi yapar (gece başına bir).',
     'Yetenek seçeneği, sahnenin altında kesik çizgili düğme olarak çıkar.',
   ] },
+  { q: '🤖 Çıt kim, ne yapar?', a: [
+    'Çıt küçük, bronz bir mekanik dosttur. 2. bölümde (ya da kuleye uğradıktan sonra) seninle birlikte yürür.',
+    'Fener yağı 9’un altına düşünce Çıt’ı “yağ bulmaya gönder”. 3 hamle sonra yaklaşık 5 yağla döner, böylece yağ bitmeden eve dönmek zorunda kalmazsın.',
+    'Çıt her gece yalnızca bir görev yapar. Yağ bitmeden önce göndermezsen, sabah bir yağ şişesiyle döner.',
+    'Çıt’a yardım edersen sana güvenir. Güven puanı arttıkça sana hediyeler getirir.',
+  ] },
+  { q: '🧩 Bulmacalar nasıl çözülür?', a: [
+    'Bazı duraklarda “🧩 Bulmacayı çöz” düğmesi çıkar. Bulmacayı çözmeden o durağı geçemezsin.',
+    'Yanlış cevap ceza değildir. Her yanlış denemede bir ipucu açılır, istediğin kadar deneyebilirsin.',
+    'Bulmaca türleri: kap ölçme, mantık sırası, sayı dizisi ve renk karışımı.',
+    'Takıldığında yeteneğini (Gözlemci, Tamirci) ve ipuçlarını kullan.',
+  ] },
   { q: '🎒 Eşyalar ve takas', a: [
     'Çantanda en fazla 8 eşya taşıyabilirsin. 🍪 Kurabiye ve 🫙 yağ şişesi gibi eşyalara “Kullan” diyerek kullanırsın.',
     'Anahtar, dişli, harita parçası ve günlük gibi hikâye eşyaları takas edilemez, onları hep sen saklarsın.',
@@ -263,6 +277,226 @@ function HelpPanel() {
     </div>
   );
 }
+
+// ---------- Bulmaca ekranı ----------
+async function puzzleApi(token: string, payload: object) {
+  const res = await fetch('/api/puzzle', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  const j = await res.json();
+  if (!res.ok) throw new Error(j.error || 'Bir şeyler ters gitti');
+  return j;
+}
+
+const swatch = (css: string, size = 22): CSSProperties => ({
+  display: 'inline-block', width: size, height: size, borderRadius: 999, background: css,
+  border: '2px solid var(--line)', verticalAlign: 'middle', marginRight: 6,
+});
+
+function PuzzlePanel({ token, onClose, onSolved }: { token: string; onClose: () => void; onSolved: () => void }) {
+  const [def, setDef] = useState<PuzzleDef | null>(null);
+  const [err, setErr] = useState('');
+  const [feedback, setFeedback] = useState<{ detail?: string; hint?: string } | null>(null);
+  const [solved, setSolved] = useState('');
+  const [working, setWorking] = useState(false);
+
+  // Bulmaca durumları
+  const [jug, setJug] = useState({ a: 0, b: 0 });
+  const [moves, setMoves] = useState<string[]>([]);
+  const [order, setOrder] = useState<string[]>([]);
+  const [nums, setNums] = useState<string[]>(['', '', '']);
+  const [mix, setMix] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    puzzleApi(token, { action: 'get' })
+      .then((j) => { setDef(j.puzzle); if (j.solved) setSolved('Bu bulmacayı çözdün!'); })
+      .catch((e) => setErr(e instanceof Error ? e.message : 'Bulmaca yüklenemedi'));
+  }, [token]);
+
+  function doMove(m: string) {
+    if (!def || def.type !== 'jugs') return;
+    const [capA, capB] = def.caps;
+    let { a, b } = jug;
+    if (m === 'fillA') a = capA;
+    else if (m === 'fillB') b = capB;
+    else if (m === 'emptyA') a = 0;
+    else if (m === 'emptyB') b = 0;
+    else if (m === 'pourAB') { const t = Math.min(a, capB - b); a -= t; b += t; }
+    else if (m === 'pourBA') { const t = Math.min(b, capA - a); b -= t; a += t; }
+    setJug({ a, b });
+    setMoves((x) => [...x, m]);
+    setFeedback(null);
+  }
+
+  async function submit() {
+    if (!def) return;
+    setWorking(true);
+    setErr('');
+    let answer: unknown = null;
+    if (def.type === 'jugs') answer = { moves };
+    else if (def.type === 'order') answer = { order };
+    else if (def.type === 'numbers') answer = { values: nums.map((n) => Number(n)) };
+    else if (def.type === 'colors') answer = { mix };
+    try {
+      const j = await puzzleApi(token, { action: 'solve', answer });
+      if (j.ok) setSolved(j.message ?? 'Çözdün!');
+      else setFeedback({ detail: j.detail, hint: j.hint });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Gönderilemedi');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  const canSubmit =
+    !def ? false :
+    def.type === 'jugs' ? moves.length > 0 :
+    def.type === 'order' ? order.length === def.items.length :
+    def.type === 'numbers' ? nums.every((n) => n.trim() !== '') :
+    def.targets.every((t) => (mix[t.id] ?? []).length === 2);
+
+  return (
+    <div className="here" style={{ marginTop: 18 }}>
+      {!def && !err && <p className="small">Bulmaca yükleniyor…</p>}
+      {err && <p role="alert">{err}</p>}
+      {def && (
+        <>
+          <h2 style={{ fontSize: '1.2rem' }}>{def.title}</h2>
+          <p style={{ margin: '8px 0' }}>{def.intro}</p>
+
+          {def.type === 'jugs' && (
+            <>
+              <p className="small"><b>Amaç:</b> {def.goal}</p>
+              <div className="row" style={{ alignItems: 'flex-end' }}>
+                {[{ n: 'Büyük kap', cap: def.caps[0], v: jug.a }, { n: 'Küçük kap', cap: def.caps[1], v: jug.b }].map((k) => (
+                  <div key={k.n} style={{ minWidth: 110 }}>
+                    <div className="small">{k.n} ({k.cap} L)</div>
+                    <div style={{ height: 14 * k.cap, width: 60, border: '2px solid var(--line)', borderRadius: 6, position: 'relative', background: 'var(--bg)' }}>
+                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${(k.v / k.cap) * 100}%`, background: 'var(--brass)', borderRadius: 4 }} />
+                    </div>
+                    <div><b>{k.v} L</b></div>
+                  </div>
+                ))}
+              </div>
+              <div className="row">
+                <button onClick={() => doMove('fillA')}>Büyüğü doldur</button>
+                <button onClick={() => doMove('fillB')}>Küçüğü doldur</button>
+                <button onClick={() => doMove('emptyA')}>Büyüğü boşalt</button>
+                <button onClick={() => doMove('emptyB')}>Küçüğü boşalt</button>
+                <button onClick={() => doMove('pourAB')}>Büyükten küçüğe aktar</button>
+                <button onClick={() => doMove('pourBA')}>Küçükten büyüğe aktar</button>
+                <button onClick={() => { setJug({ a: 0, b: 0 }); setMoves([]); setFeedback(null); }}>↺ Baştan başla</button>
+              </div>
+              <p className="small">Hamle sayısı: {moves.length}</p>
+            </>
+          )}
+
+          {def.type === 'order' && (
+            <>
+              <ul className="small" style={{ paddingLeft: 18 }}>{def.clues.map((c) => <li key={c}>{c}</li>)}</ul>
+              <p className="small">Halkaya dokun, soldan sağa sıraya girsin. Yerleştirdiğine tekrar dokunursan geri alınır.</p>
+              <div className="row">
+                {def.items.map((it) => (
+                  <button key={it.id} disabled={order.includes(it.id)} onClick={() => { setOrder((o) => [...o, it.id]); setFeedback(null); }}>
+                    <span style={swatch(it.css)} />{it.label}
+                  </button>
+                ))}
+              </div>
+              <div className="row" style={{ minHeight: 48, alignItems: 'center' }}>
+                <span className="small">Sıra:</span>
+                {order.length === 0 && <span className="small">(boş)</span>}
+                {order.map((id, i) => {
+                  const it = def.items.find((x) => x.id === id)!;
+                  return (
+                    <button key={id} onClick={() => { setOrder((o) => o.filter((x) => x !== id)); setFeedback(null); }}>
+                      {i + 1}. <span style={swatch(it.css, 18)} />{it.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {def.type === 'numbers' && (
+            <>
+              {def.questions.map((q, i) => (
+                <div key={i} style={{ margin: '10px 0' }}>
+                  <div className="small">{q.q}</div>
+                  <div style={{ fontSize: '1.1rem' }}>{q.seq.join(', ')}, <b>?</b></div>
+                  <input
+                    type="number" inputMode="numeric" aria-label={`${q.q} sıradaki sayı`}
+                    value={nums[i]} style={{ maxWidth: 140 }}
+                    onChange={(e) => { const v = [...nums]; v[i] = e.target.value; setNums(v); setFeedback(null); }}
+                  />
+                </div>
+              ))}
+            </>
+          )}
+
+          {def.type === 'colors' && (
+            <>
+              <p className="small">Her renk için paletten iki renk seç.</p>
+              {def.targets.map((t) => {
+                const chosen = mix[t.id] ?? [];
+                return (
+                  <div key={t.id} style={{ margin: '10px 0' }}>
+                    <div><span style={swatch(t.css, 26)} /><b>{t.label}</b> <span className="small">= {chosen.map((c) => def.palette.find((p) => p.id === c)?.label).join(' + ') || '…'}</span></div>
+                    <div className="row">
+                      {def.palette.map((p) => {
+                        const on = chosen.includes(p.id);
+                        return (
+                          <button
+                            key={p.id}
+                            aria-pressed={on}
+                            style={on ? { borderColor: 'var(--brass)', borderWidth: 2 } : undefined}
+                            onClick={() => {
+                              setFeedback(null);
+                              setMix((m) => {
+                                const cur = m[t.id] ?? [];
+                                if (cur.includes(p.id)) return { ...m, [t.id]: cur.filter((x) => x !== p.id) };
+                                if (cur.length >= 2) return { ...m, [t.id]: [cur[1], p.id] };
+                                return { ...m, [t.id]: [...cur, p.id] };
+                              });
+                            }}
+                          >
+                            <span style={swatch(p.css, 16)} />{p.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+
+          {solved ? (
+            <>
+              <p><b>✨ {solved}</b></p>
+              <div className="choices"><button onClick={onSolved}>Devam et</button></div>
+            </>
+          ) : (
+            <>
+              <div className="row">
+                <button disabled={working || !canSubmit} onClick={submit}>{working ? 'Kontrol ediliyor…' : 'Cevabı gönder'}</button>
+                <button onClick={onClose}>Sonra devam ederim</button>
+              </div>
+              {feedback && (
+                <div className="small" role="status" style={{ marginTop: 10 }}>
+                  <div>Henüz değil, ama çok yakınsın. {feedback.detail}</div>
+                  {feedback.hint && <div>💡 İpucu: {feedback.hint}</div>}
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 
 function CreateCharacter({ userId, onDone }: { userId: string; onDone: () => void }) {
   const [name, setName] = useState('');
@@ -406,9 +640,10 @@ function MapView({ character, busy, counts, onTravel }: { character: Character; 
 
 function Game(props: {
   character: Character; scene: Scene | null; busy: boolean; error: string; notices: string[]; token: string;
-  onChoose: (id: string) => void; onTravel: (to: string) => void; onUse: (item: string) => void; onRefresh: () => void;
+  onChoose: (id: string) => void; onTravel: (to: string) => void; onUse: (item: string) => void; onCit: () => void; onRefresh: () => void;
 }) {
-  const { character, scene, busy, error, notices, token, onChoose, onTravel, onUse, onRefresh } = props;
+  const { character, scene, busy, error, notices, token, onChoose, onTravel, onUse, onCit, onRefresh } = props;
+  const [puzzleOpen, setPuzzleOpen] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showOnline, setShowOnline] = useState(false);
@@ -643,6 +878,24 @@ function Game(props: {
             ))}
           </div>
         )}
+        {character.cit.available && (
+          <div className="here" style={{ marginTop: 10 }}>
+            <b>🤖 Çıt</b> <span className="small">
+              {character.cit.away
+                ? `yağ arıyor, ${character.cit.movesLeft} hamle sonra dönecek`
+                : character.cit.rested
+                  ? 'bu gece bir görev yaptı, dinleniyor'
+                  : 'yanında'}
+            </span>
+            <div className="small">Fener yağı azalınca Çıt’ı yağ bulmaya gönderebilirsin. Böylece yağ bitmeden dönmek zorunda kalmazsın.</div>
+            <div className="row">
+              <button disabled={busy || !character.cit.canSend} onClick={onCit}>🤖 Çıt’ı yağ bulmaya gönder</button>
+            </div>
+            {!character.cit.canSend && !character.cit.away && !character.cit.rested && (
+              <div className="small">{character.lantern > 9 ? 'Fener yağı 9’un altına düşünce gönderebilirsin.' : ''}</div>
+            )}
+          </div>
+        )}
         {character.friends.length > 0 && (
           <div className="small" style={{ marginTop: 10 }}>
             <b>Dostların:</b>{' '}
@@ -665,13 +918,20 @@ function Game(props: {
               <button
                 key={c.id}
                 disabled={busy}
-                onClick={() => onChoose(c.id)}
-                style={c.id === 'skill' ? { borderStyle: 'dashed', borderColor: 'var(--brass)' } : undefined}
+                onClick={() => (c.id === 'puzzle' ? setPuzzleOpen(true) : onChoose(c.id))}
+                style={c.id === 'skill' ? { borderStyle: 'dashed', borderColor: 'var(--brass)' } : c.id === 'puzzle' ? { borderColor: 'var(--brass)', borderWidth: 2 } : undefined}
               >
                 {c.label}
               </button>
             ))}
           </div>
+          {puzzleOpen && (
+            <PuzzlePanel
+              token={token}
+              onClose={() => setPuzzleOpen(false)}
+              onSolved={() => { setPuzzleOpen(false); onChoose('puzzle_done'); }}
+            />
+          )}
           {busy && <p className="small">Hikâye yazılıyor…</p>}
           {error && <p role="alert">{error}</p>}
           {notices.length > 0 && (
