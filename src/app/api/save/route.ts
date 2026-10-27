@@ -70,13 +70,24 @@ export async function POST(req: NextRequest) {
 
   if (action === 'reset') {
     // Ad ve yetenek kalır. İlerleme, eşyalar ve güven puanları sıfırlanır. Kayıt yuvaları korunur.
+    // İstenirse yeni takma ad ve yetenekle (yeni karakter) başlanır.
     const meta = { replays: ((ch.meta ?? {}).replays ?? 0) + 1 };
+    const who: { name?: string; skill?: string } = {};
+    if (body.name !== undefined || body.skill !== undefined) {
+      const name = String(body.name ?? '').trim();
+      const skill = String(body.skill ?? '');
+      if (name.length < 2 || name.length > 16) return fail('Takma ad 2 ile 16 harf arasında olmalı');
+      if (!['gozlemci', 'konuskan', 'cevik', 'tamirci'].includes(skill)) return fail('Geçersiz yetenek');
+      who.name = name;
+      who.skill = skill;
+    }
     const { error } = await admin.from('characters').update({
+      ...who,
       location: 'yurt', node: 1, fear: 0, lantern: 14, items: [], flags: {},
       chapter: 1, trust: {}, meta, current: null,
     }).eq('id', ch.id);
     if (error) return fail('Baştan başlanamadı', 500);
-    return NextResponse.json({ ok: true, message: 'Yeni bir oyun başladı.' });
+    return NextResponse.json({ ok: true, message: who.name ? `Yeni karakter: ${who.name}. Yeni bir oyun başladı.` : 'Yeni bir oyun başladı.' });
   }
 
   return fail('Bilinmeyen işlem');
